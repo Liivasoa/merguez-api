@@ -23,3 +23,4 @@ The POM inherits dependency and plugin management from the Spring Boot parent. D
 - Keep Java sources and tests under the `mg.msys.merguez_api` package. The underscore is intentional; the generated `HELP.md` notes it replaces the invalid hyphenated package name.
 - Keep Spring configuration in `src/main/resources/application.yaml`.
 - Place tests under `src/test/java` in the matching package; the existing test uses JUnit Jupiter and `@SpringBootTest`.
+- Important: Use English for all code, comments, and documentation.
