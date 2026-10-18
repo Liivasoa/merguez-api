@@ -25,4 +25,21 @@ class CreateGroupTest {
         // Then the group "Dojo du mardi" is created
         assertEquals("Dojo du mardi", group.name());
     }
+
+    @Test
+    @DisplayName("A group is created with a description")
+    void groupIsCreatedWithDescription() {
+        // Given a user "Alice"
+        User alice = new User("Alice");
+        // And another user "Bob"
+        User bob = new User("Bob");
+
+        // When Alice creates a group named "Dojo du mardi" with the description "Séances entre amis" and Bob as a participant
+        Group group = Group.create("Dojo du mardi", "Séances entre amis", alice, List.of(bob));
+
+        // Then the group is created
+        assertEquals("Dojo du mardi", group.name());
+        // And the group description is "Séances entre amis"
+        assertEquals("Séances entre amis", group.description());
+    }
 }
