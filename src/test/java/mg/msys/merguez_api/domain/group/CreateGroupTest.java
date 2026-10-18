@@ -1,6 +1,7 @@
 package mg.msys.merguez_api.domain.group;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.List;
 import java.util.Optional;
 
@@ -58,5 +59,22 @@ class CreateGroupTest {
         assertEquals("Dojo du mardi", group.name());
         // And the group has no description
         assertEquals(Optional.empty(), group.description());
+    }
+
+    @Test
+    @DisplayName("Group creation is refused when the name is missing")
+    void groupCreationIsRefusedWhenNameIsMissing() {
+        // Given a user "Alice"
+        User alice = new User("Alice");
+        // And another user "Bob"
+        User bob = new User("Bob");
+
+        // When Alice creates a group without a name and with Bob as a participant
+        // Then the creation is refused because the name is required
+        // And no group is created
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> Group.create(null, alice, List.of(bob)));
+        assertEquals("Group name is required", exception.getMessage());
     }
 }

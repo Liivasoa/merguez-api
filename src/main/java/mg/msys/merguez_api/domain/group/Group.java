@@ -21,6 +21,9 @@ public final class Group {
     }
 
     public static Group create(String name, String description, User creator, List<User> participants) {
+        if (name == null) {
+            throw new IllegalArgumentException("Group name is required");
+        }
         return new Group(name, description);
     }
 
