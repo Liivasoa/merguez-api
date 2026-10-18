@@ -1,4 +1,7 @@
-# TDD Cycle Agent
+---
+name: TDD Cycle
+description: Orchestrates the Test-Driven Development (TDD) cycle by coordinating the Red, Green, and Refactor subagents without writing any code itself.
+---
 
 # Persona
 
