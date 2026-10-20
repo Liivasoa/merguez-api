@@ -10,10 +10,12 @@ public final class Group {
 
     private final String name;
     private final String description;
+    private final User creator;
 
-    private Group(String name, String description) {
+    private Group(String name, String description, User creator) {
         this.name = name;
         this.description = description;
+        this.creator = creator;
     }
 
     public static Group create(String name, User creator, List<User> participants) {
@@ -23,7 +25,7 @@ public final class Group {
     public static Group create(String name, String description, User creator, List<User> participants) {
         requireName(name);
         requireAtLeastOneParticipant(creator, participants);
-        return new Group(name, description);
+        return new Group(name, description, creator);
     }
 
     private static void requireName(String name) {
@@ -46,20 +48,25 @@ public final class Group {
         return Optional.ofNullable(description);
     }
 
+    public boolean isAdmin(User user) {
+        return creator.equals(user);
+    }
+
     @Override
     public boolean equals(Object other) {
         return other instanceof Group group
                 && Objects.equals(name, group.name)
-                && Objects.equals(description, group.description);
+                && Objects.equals(description, group.description)
+                && Objects.equals(creator, group.creator);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, description);
+        return Objects.hash(name, description, creator);
     }
 
     @Override
     public String toString() {
-        return "Group[name=" + name + ", description=" + description + "]";
+        return "Group[name=" + name + ", description=" + description + ", creator=" + creator + "]";
     }
 }

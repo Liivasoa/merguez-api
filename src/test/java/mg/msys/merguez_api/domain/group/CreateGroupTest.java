@@ -2,6 +2,7 @@ package mg.msys.merguez_api.domain.group;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Optional;
@@ -127,5 +128,20 @@ class CreateGroupTest {
                 IllegalArgumentException.class,
                 () -> Group.create("Dojo du mardi", alice, List.of(alice)));
         assertEquals("At least one participant other than the creator is required", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("The group creator is an admin of the group")
+    void groupCreatorIsAdmin() {
+        // Given a user "Alice"
+        User alice = new User("Alice");
+        // And another user "Bob"
+        User bob = new User("Bob");
+
+        // When Alice creates a group named "Dojo du mardi" with Bob as a participant
+        Group group = Group.create("Dojo du mardi", alice, List.of(bob));
+
+        // Then Alice is an admin of the group
+        assertTrue(group.isAdmin(alice));
     }
 }
