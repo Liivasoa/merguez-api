@@ -1,6 +1,7 @@
 package mg.msys.merguez_api.domain.group;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -143,5 +144,26 @@ class CreateGroupTest {
 
         // Then Alice is an admin of the group
         assertTrue(group.isAdmin(alice));
+    }
+
+    @Test
+    @DisplayName("The added users are members of the group and are not admins")
+    void addedUsersAreMembersAndNotAdmins() {
+        // Given a user "Alice"
+        User alice = new User("Alice");
+        // And two other users "Bob" and "Chloé"
+        User bob = new User("Bob");
+        User chloe = new User("Chloé");
+
+        // When Alice creates a group named "Dojo du mardi" with Bob and Chloé as participants
+        Group group = Group.create("Dojo du mardi", alice, List.of(bob, chloe));
+
+        // Then Bob is a member of the group
+        assertTrue(group.isMember(bob));
+        // And Chloé is a member of the group
+        assertTrue(group.isMember(chloe));
+        // And Bob and Chloé are not admins of the group
+        assertFalse(group.isAdmin(bob));
+        assertFalse(group.isAdmin(chloe));
     }
 }

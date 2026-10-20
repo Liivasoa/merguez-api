@@ -11,11 +11,13 @@ public final class Group {
     private final String name;
     private final String description;
     private final User creator;
+    private final List<User> participants;
 
-    private Group(String name, String description, User creator) {
+    private Group(String name, String description, User creator, List<User> participants) {
         this.name = name;
         this.description = description;
         this.creator = creator;
+        this.participants = List.copyOf(participants);
     }
 
     public static Group create(String name, User creator, List<User> participants) {
@@ -25,7 +27,7 @@ public final class Group {
     public static Group create(String name, String description, User creator, List<User> participants) {
         requireName(name);
         requireAtLeastOneParticipant(creator, participants);
-        return new Group(name, description, creator);
+        return new Group(name, description, creator, participants);
     }
 
     private static void requireName(String name) {
@@ -52,21 +54,26 @@ public final class Group {
         return creator.equals(user);
     }
 
+    public boolean isMember(User user) {
+        return participants.contains(user);
+    }
+
     @Override
     public boolean equals(Object other) {
         return other instanceof Group group
                 && Objects.equals(name, group.name)
                 && Objects.equals(description, group.description)
-                && Objects.equals(creator, group.creator);
+                && Objects.equals(creator, group.creator)
+                && Objects.equals(participants, group.participants);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, description, creator);
+        return Objects.hash(name, description, creator, participants);
     }
 
     @Override
     public String toString() {
-        return "Group[name=" + name + ", description=" + description + ", creator=" + creator + "]";
+        return "Group[name=" + name + ", description=" + description + ", creator=" + creator + ", participants=" + participants + "]";
     }
 }
