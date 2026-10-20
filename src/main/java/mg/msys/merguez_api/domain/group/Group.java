@@ -8,12 +8,14 @@ import mg.msys.merguez_api.domain.user.UserId;
 
 public final class Group {
 
+    private final GroupId id;
     private final String name;
     private final String description;
     private final UserId creator;
     private final List<UserId> participants;
 
-    private Group(String name, String description, UserId creator, List<UserId> participants) {
+    private Group(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
+        this.id = id;
         this.name = name;
         this.description = description;
         this.creator = creator;
@@ -27,7 +29,7 @@ public final class Group {
     public static Group create(String name, String description, UserId creator, List<UserId> participants) {
         requireName(name);
         requireAtLeastOneParticipant(creator, participants);
-        return new Group(name, description, creator, participants);
+        return new Group(GroupId.random(), name, description, creator, participants);
     }
 
     private static void requireName(String name) {
@@ -40,6 +42,10 @@ public final class Group {
         if (participants.stream().allMatch(participant -> participant.equals(creator))) {
             throw new IllegalArgumentException("At least one participant other than the creator is required");
         }
+    }
+
+    public GroupId id() {
+        return id;
     }
 
     public String name() {
@@ -61,6 +67,7 @@ public final class Group {
     @Override
     public boolean equals(Object other) {
         return other instanceof Group group
+                && Objects.equals(id, group.id)
                 && Objects.equals(name, group.name)
                 && Objects.equals(description, group.description)
                 && Objects.equals(creator, group.creator)
@@ -69,11 +76,11 @@ public final class Group {
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, description, creator, participants);
+        return Objects.hash(id, name, description, creator, participants);
     }
 
     @Override
     public String toString() {
-        return "Group[name=" + name + ", description=" + description + ", creator=" + creator + ", participants=" + participants + "]";
+        return "Group[id=" + id + ", name=" + name + ", description=" + description + ", creator=" + creator + ", participants=" + participants + "]";
     }
 }
