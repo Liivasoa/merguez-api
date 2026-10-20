@@ -4,27 +4,27 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-import mg.msys.merguez_api.domain.user.User;
+import mg.msys.merguez_api.domain.user.UserId;
 
 public final class Group {
 
     private final String name;
     private final String description;
-    private final User creator;
-    private final List<User> participants;
+    private final UserId creator;
+    private final List<UserId> participants;
 
-    private Group(String name, String description, User creator, List<User> participants) {
+    private Group(String name, String description, UserId creator, List<UserId> participants) {
         this.name = name;
         this.description = description;
         this.creator = creator;
         this.participants = List.copyOf(participants);
     }
 
-    public static Group create(String name, User creator, List<User> participants) {
+    public static Group create(String name, UserId creator, List<UserId> participants) {
         return create(name, null, creator, participants);
     }
 
-    public static Group create(String name, String description, User creator, List<User> participants) {
+    public static Group create(String name, String description, UserId creator, List<UserId> participants) {
         requireName(name);
         requireAtLeastOneParticipant(creator, participants);
         return new Group(name, description, creator, participants);
@@ -36,7 +36,7 @@ public final class Group {
         }
     }
 
-    private static void requireAtLeastOneParticipant(User creator, List<User> participants) {
+    private static void requireAtLeastOneParticipant(UserId creator, List<UserId> participants) {
         if (participants.stream().allMatch(participant -> participant.equals(creator))) {
             throw new IllegalArgumentException("At least one participant other than the creator is required");
         }
@@ -50,12 +50,12 @@ public final class Group {
         return Optional.ofNullable(description);
     }
 
-    public boolean isAdmin(User user) {
-        return creator.equals(user);
+    public boolean isAdmin(UserId userId) {
+        return creator.equals(userId);
     }
 
-    public boolean isMember(User user) {
-        return participants.contains(user);
+    public boolean isMember(UserId userId) {
+        return participants.contains(userId);
     }
 
     @Override
