@@ -7,6 +7,8 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import mg.msys.merguez_api.domain.user.User;
 
@@ -75,6 +77,24 @@ class CreateGroupTest {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> Group.create(null, alice, List.of(bob)));
+        assertEquals("Group name is required", exception.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "   "})
+    @DisplayName("Group creation is refused when the name is empty or blank")
+    void groupCreationIsRefusedWhenNameIsEmptyOrBlank(String blankName) {
+        // Given a user "Alice"
+        User alice = new User("Alice");
+        // And another user "Bob"
+        User bob = new User("Bob");
+
+        // When Alice creates a group whose name is empty or made only of spaces and with Bob as a participant
+        // Then the creation is refused because the name is required
+        // And no group is created
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> Group.create(blankName, alice, List.of(bob)));
         assertEquals("Group name is required", exception.getMessage());
     }
 }
