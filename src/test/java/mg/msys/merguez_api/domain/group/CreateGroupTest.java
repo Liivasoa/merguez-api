@@ -2,6 +2,7 @@ package mg.msys.merguez_api.domain.group;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -96,5 +97,35 @@ class CreateGroupTest {
                 IllegalArgumentException.class,
                 () -> Group.create(blankName, alice, List.of(bob)));
         assertEquals("Group name is required", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("Group creation is refused when no participant is added")
+    void groupCreationIsRefusedWhenNoParticipantIsAdded() {
+        // Given a user "Alice"
+        User alice = new User("Alice");
+
+        // When Alice creates a group named "Dojo du mardi" without any participant
+        // Then the creation is refused because at least one participant other than the creator is required
+        // And no group is created
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> Group.create("Dojo du mardi", alice, List.of()));
+        assertEquals("At least one participant other than the creator is required", exception.getMessage());
+    }
+
+    @Test
+    @DisplayName("Group creation is refused when the creator is the only participant")
+    void groupCreationIsRefusedWhenCreatorIsTheOnlyParticipant() {
+        // Given a user "Alice"
+        User alice = new User("Alice");
+
+        // When Alice creates a group named "Dojo du mardi" with only herself as a participant
+        // Then the creation is refused because at least one participant other than the creator is required
+        // And no group is created
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> Group.create("Dojo du mardi", alice, List.of(alice)));
+        assertEquals("At least one participant other than the creator is required", exception.getMessage());
     }
 }

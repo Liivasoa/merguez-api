@@ -21,10 +21,21 @@ public final class Group {
     }
 
     public static Group create(String name, String description, User creator, List<User> participants) {
+        requireName(name);
+        requireAtLeastOneParticipant(creator, participants);
+        return new Group(name, description);
+    }
+
+    private static void requireName(String name) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Group name is required");
         }
-        return new Group(name, description);
+    }
+
+    private static void requireAtLeastOneParticipant(User creator, List<User> participants) {
+        if (participants.stream().allMatch(participant -> participant.equals(creator))) {
+            throw new IllegalArgumentException("At least one participant other than the creator is required");
+        }
     }
 
     public String name() {
