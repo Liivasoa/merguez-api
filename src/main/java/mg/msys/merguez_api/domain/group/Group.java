@@ -3,6 +3,7 @@ package mg.msys.merguez_api.domain.group;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import mg.msys.merguez_api.domain.user.UserId;
 
@@ -54,6 +55,13 @@ public final class Group {
 
     public Optional<String> description() {
         return Optional.ofNullable(description);
+    }
+
+    public List<GroupMember> members() {
+        return Stream.concat(
+                        Stream.of(new GroupMember(creator, Role.ADMIN)),
+                        participants.stream().map(participant -> new GroupMember(participant, Role.MEMBER)))
+                .toList();
     }
 
     public boolean isAdmin(UserId userId) {

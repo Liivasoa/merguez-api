@@ -168,6 +168,27 @@ class CreateGroupTest {
         assertFalse(group.isAdmin(chloe));
     }
 
+    @Test
+    @DisplayName("The group exposes its members with their roles")
+    void groupExposesMembersWithTheirRoles() {
+        // Given a user "Alice"
+        UserId alice = userId();
+        // And two other users "Bob" and "Chloé"
+        UserId bob = userId();
+        UserId chloe = userId();
+
+        // When Alice creates a group named "Dojo du mardi" with Bob and Chloé as participants
+        Group group = Group.create("Dojo du mardi", alice, List.of(bob, chloe));
+
+        // Then the group exposes Alice as an admin, followed by Bob and Chloé as members
+        assertEquals(
+                List.of(
+                        new GroupMember(alice, Role.ADMIN),
+                        new GroupMember(bob, Role.MEMBER),
+                        new GroupMember(chloe, Role.MEMBER)),
+                group.members());
+    }
+
     private static UserId userId() {
         return new UserId(UUID.randomUUID());
     }
