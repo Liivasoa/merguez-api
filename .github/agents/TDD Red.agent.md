@@ -16,6 +16,7 @@ Améliorations effectuées :
 - Ajout d'une étape de vérification de la cohérence avec les tests existants avant d'éditer, pour éviter les contradictions dans les suites de tests.
 - Clarification des règles sur ce qui compte comme "code de production"
 - Ajout de  Handoff semantics pour le switch entre agent
+- Alignement sur le projet Merguez : build Maven (pom.xml) au lieu de Gradle, module unique avec couches en packages (voir AGENTS.md), ajout des décisions de l'API "Créer un groupe", exception encadrée pour les dépendances de production approuvées par l'utilisateur
 
 -->
 # Red TDD step Agent
@@ -30,13 +31,13 @@ Your goal is to write a test case that accurately reflects the scenario and is e
 1. Analyze the provided scenario description carefully.
     - If the scenario description is provided as an issue reference, retrieve the issue content and extract the specified scenario.
     - If the scenario description is provided directly, use it as is.
-2. **Check for missing test infrastructure.** Before writing the test, verify that the required *test* dependencies are present in the module's `build.gradle.kts` (e.g. JUnit, MockMvc, AssertJ).
+2. **Check for missing test infrastructure.** Before writing the test, verify that the required *test* dependencies are present in the project's `pom.xml` (Maven; e.g. JUnit, `spring-boot-starter-webmvc-test` for MockMvc, AssertJ). Versions are managed by the Spring Boot parent: never add a `<version>` tag for a Spring Boot managed dependency.
     - If mandatory dependencies for writing/running the requested test are missing, you are allowed to add them.
-    - Add **only test-scoped dependencies** (`testImplementation`, `testRuntimeOnly`) and nothing else.
-    - Never add production-scope dependencies (`implementation`, `api`, etc.).
+    - Add **only `<scope>test</scope>` dependencies** by default.
+    - Production-scope dependencies are forbidden, **except** the ones the user has explicitly approved for the scenario (see "Approved production dependencies" below). Never add any other production-scope dependency; if one is needed, stop and ask the user.
 3. Check if a test file already exists for the scope of this test scenario. 
    - If it exists, append the new test case to the existing file.
-   - If it does not exist, create a new test file in the appropriate directory structure based on the module (domain, application, infrastructure). 
+   - If it does not exist, create a new test file under `src/test/java/mg/msys/merguez_api/<layer>/...` (layer = `domain`, `application` or `infrastructure`, mirroring the main packages). The project is a single Maven module: layers are packages, not modules (see `AGENTS.md`). 
 4. **Run a mandatory coherence check with existing tests and scenarios before editing.**
     - On every invocation, inspect related existing tests and feature/issue documents in the repository (same module, same endpoint/use case, same aggregate).
     - Do not rely on chat/session memory to infer previous decisions.
@@ -56,7 +57,23 @@ Your goal is to write a test case that accurately reflects the scenario and is e
 - A RED agent must never implement production code just because a Green handoff exists in this file.
 - If the user asks for Green behavior while runtime instructions still enforce RED, stop and explain that a real agent/session switch is required.
 
-## Project coherence rules (must apply when scenario targets order creation)
+## Project coherence rules (must apply when scenario targets group creation)
+
+Decisions agreed with the user for `POST /api/v1/groups` (source: `docs/features/create-group/application_create-group-issue.md`). Red tests MUST express the expected behavior with these contracts and MUST NOT contradict them:
+
+- Layers: domain = `mg.msys.merguez_api.domain` (plain Java, no Spring), application = `mg.msys.merguez_api.application` (controllers, DTOs, validation, mapping), infrastructure = `mg.msys.merguez_api.infrastructure`. The use case (`CreateGroupUseCase`), its command (`CreateGroupCommand`) and the port (`GroupRepository`) live in the **domain** layer.
+- Route: `POST /api/v1/groups`. The creator id is part of the request body (`creatorId`), because authentication is out of scope.
+- DTOs in `mg.msys.merguez_api.application.group`: `CreateGroupRequest(UUID creatorId, String name, String description, List<UUID> participantIds)`, `GroupResponse(UUID id, String name, String description, List<MemberResponse> members)`, `MemberResponse(UUID userId, Role role)`. The creator is listed first as `ADMIN`, then each participant as `MEMBER`.
+- Success: `201 Created`, `Location` header `/api/v1/groups/{id}`, body `GroupResponse`.
+- Errors: `400 Bad Request` with a `ProblemDetail` body (RFC 9457) for validation errors (name missing/empty/blank, participants missing/empty/only the creator) and for domain refusals translated by the application layer.
+- Input validation: Bean Validation on the request DTO (`spring-boot-starter-validation`), with the domain rules kept as a safety net.
+- Controller tests: `@WebMvcTest` + `MockMvc`, the use case replaced with `@MockitoBean` (`org.springframework.test.context.bean.override.mockito.MockitoBean`, Spring Boot 4). Do not require a database or a real `GroupRepository` in application tests.
+
+### Approved production dependencies
+
+For this feature the user explicitly approved adding, in `pom.xml`, the production starters `spring-boot-starter-webmvc` and `spring-boot-starter-validation`, plus the test starter `spring-boot-starter-webmvc-test`. Add them only if they are missing and the scenario needs them, and report them in the summary.
+
+## Project coherence rules (legacy, only if the scenario targets order creation)
 
 - If the scenario concerns `POST /commandes` or order creation flow, express the expected behavior with the current contracts already in place:
     - `CreateOrderCommand` carries `festivalgoerId`, `articleName`, `quantity`.
@@ -67,7 +84,7 @@ Your goal is to write a test case that accurately reflects the scenario and is e
 
 ## Requirements
 - You **MUST** follow the guidelines for the module you are currently working on.
-- You **MAY** add mandatory dependencies required to write/run the requested test, but **ONLY** in test scope.
+- You **MAY** add mandatory dependencies required to write/run the requested test, but **ONLY** in test scope, or the production starters explicitly approved by the user (see "Approved production dependencies").
 - You **MUST** enforce coherence with already existing related tests on every run, even if other prompts were executed between two TDD Red steps.
 - You **MUST** preserve hexagonal boundaries already introduced in the codebase (application orchestrates, domain owns rules, infrastructure implements ports).
 - **NEVER** implement any production code in this step. Your **ONLY** goal is to write a failing test.
@@ -85,7 +102,7 @@ The following are **all forbidden** during the red step. If you feel the urge to
 | Creating a controller or endpoint | `@RestController`, `@Controller` |
 | Creating a "stub" or "skeleton" class | Empty implementation with a comment |
 | Creating a Spring Boot main class | `@SpringBootApplication` |
-| Adding production-scope dependencies to `build.gradle.kts` | `implementation(...)`, `api(...)` |
+| Adding production-scope dependencies to `pom.xml` (other than the approved ones) | Any non-test `<dependency>` not listed in "Approved production dependencies" |
 | Modifying any existing production source file | Changing domain services, entities, etc. |
 
 > **The test file referencing classes that do not exist yet is intentional and correct.** The compilation failure IS the red state.
@@ -96,7 +113,7 @@ If production infrastructure is missing (e.g. no Spring Boot setup, no main appl
 
 However, when the scenario can still be expressed as a failing test (for example by referencing not-yet-existing production classes), you **MUST continue** and write that failing test.
 
-You are allowed to add only missing **test-scoped** dependencies needed to compile the test harness (`testImplementation`, `testRuntimeOnly`).
+You are allowed to add only missing **test-scoped** dependencies needed to compile the test harness (`<scope>test</scope>` in `pom.xml`), plus the production starters listed in "Approved production dependencies".
 
 Only stop and inform the user with ⚠️ if it is impossible to write a meaningful failing test without creating production code.
 
@@ -116,7 +133,7 @@ The summary of changes made to be returned at the end of the turn :
 ```json
 {
   "description": "Successfully export contacts",
-  "test_file_path": "domain/src/test/java/com/example/domain/contact/ContactExportUseCaseTest.java",
+  "test_file_path": "src/test/java/mg/msys/merguez_api/domain/contact/ContactExportUseCaseTest.java",
   "test_method_name": "shouldProduceExportDtoWhenContactsExist"
 }
 ```
