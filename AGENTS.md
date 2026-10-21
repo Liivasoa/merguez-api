@@ -43,49 +43,39 @@ You MUST strictly adhere to the following guidelines:
 
 ## Architectural Context
 
-The project follows a Hexagonal Architecture (Ports and Adapters), organized into distinct Modules :
+The project follows a Hexagonal Architecture (Ports and Adapters). It is a **single Maven module** (one `pom.xml`, one Spring Boot application): the three layers are separated by **packages** under the base package `mg.msys.merguez_api`, not by Maven modules.
 
-- **Application Module** (`merguez-api-application`), located in {repository_root}/application/ : User side, containing the REST API Controllers and DTOs, and other exposed endpoints to the outside world.
-  - Depends on the Domain Module to perform business operations and call the Use Cases.
-  - Depends on the Infrastructure Module for technical implementations (persistence, external services).
+- **Application layer** (`mg.msys.merguez_api.application`) : User side, containing the REST API Controllers and DTOs, and other exposed endpoints to the outside world.
+  - Depends on the Domain layer to perform business operations and call the Use Cases.
+  - Does not depend on the Infrastructure layer's classes: it only relies on the Domain's ports, wired by Spring configuration.
   - Handles input validation, request mapping, and response formatting, API Contract exposition (OpenAPI, AsyncAPI)
-- **Domain Module** (`merguez-api-domain`), located in {repository_root}/domain/ : the hexagon core, containing the Domain Entities, Value Objects, Domain Services, Ports definitions, and Use Cases implementations.
-    - Independent of other modules, focusing solely on business logic and rules.
-    - Defines interfaces (Ports) for driven adapters (repositories, external services)
-    - Use Cases and their related Commands/Query are used as Primary Adapters to expose business operations to the Application Module.
-- **Infrastructure Module** (`merguez-api-infrastructure`), located in {repository_root}/infrastructure/ : containing the technical implementations of the Ports defined in the Domain Module.
-  - Depends on the Domain Module to implement the defined Ports.
+- **Domain layer** (`mg.msys.merguez_api.domain`) : the hexagon core, containing the Domain Entities, Value Objects, Domain Services, Ports definitions, and Use Cases implementations.
+  - Independent of the other layers, focusing solely on business logic and rules. Plain Java: no Spring annotation, no framework dependency.
+  - Defines interfaces (Ports) for driven adapters (repositories, external services)
+  - Use Cases and their related Commands/Query are used as Primary Adapters to expose business operations to the Application layer.
+  - Organized by business concept in sub-packages (e.g. `domain.group`, `domain.user`).
+- **Infrastructure layer** (`mg.msys.merguez_api.infrastructure`) : containing the technical implementations of the Ports defined in the Domain layer.
+  - Depends on the Domain layer to implement the defined Ports.
   - Implements persistence (repositories), external service integrations, and other technical concerns.
   - Handles database interactions, external API calls, and other infrastructure-related tasks.
 
-  ## Repository Structure
+**Dependency rule** (not enforced by the build, because there is a single module; respect it by convention and in reviews):
+`application` → `domain` ← `infrastructure`. The `domain` package must never import from `application` or `infrastructure`.
+
+## Repository Structure
 
 ```markdown
 <repository_root>
-├─ application/                      # Application module (REST controllers, DTOs, API layer)
-│  ├─ src/
-│  │  ├─ main/
-│  │  │  ├─ java/
-│  │  │  └─ resources/
-│  │  └─ test/
-│  │  │  ├─ java/
-│  │  │  └─ resources/
-├─ domain/                           # Domain module (entities, value objects, use-cases, ports)
-│  └─ src/
-│     ├─ main/
-│     │  ├─ java/
-│     │  └─ resources/
-│     └─ test/
-│        ├─ java/
-│        └─ resources/
-├─ infrastructure/                   # Infrastructure module (persistence, external adapters)
-│  └─ src/
-│     ├─ main/
-│     │  ├─ java/
-│     │  └─ resources/
-│     └─ test/
-│        ├─ java/
-│        └─ resources/
+├─ src/
+│  ├─ main/
+│  │  ├─ java/mg/msys/merguez_api/
+│  │  │  ├─ application/             # Application layer (REST controllers, DTOs, API layer)
+│  │  │  ├─ domain/                  # Domain layer (entities, value objects, use-cases, ports)
+│  │  │  └─ infrastructure/          # Infrastructure layer (persistence, external adapters)
+│  │  └─ resources/                  # Spring configuration (application.yaml)
+│  └─ test/
+│     ├─ java/mg/msys/merguez_api/   # Tests, mirroring the main packages
+│     └─ resources/
 ├─ docs/                             # Documentation folder
 │  ├─ agents/                        # Agent specific instructions and documentation
 │  └─ features/                      # Documentation related to individual features
