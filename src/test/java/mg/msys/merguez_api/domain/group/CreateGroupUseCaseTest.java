@@ -2,6 +2,7 @@ package mg.msys.merguez_api.domain.group;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -44,6 +45,28 @@ class CreateGroupUseCaseTest {
         assertTrue(result.isMember(participantId));
         // And the group is saved through the repository
         assertEquals(List.of(result), repository.saved);
+    }
+
+    @Test
+    @DisplayName("The use case propagates the domain refusal and saves nothing")
+    void useCaseDoesNotSaveAnythingWhenTheDomainRefusesTheRequest() {
+        // Given a creator and a participant
+        UserId creatorId = userId();
+        UserId participantId = userId();
+        // And a group repository
+        InMemoryGroupRepository repository = new InMemoryGroupRepository();
+        CreateGroupUseCase useCase = new CreateGroupUseCase(repository);
+        // And a command with a blank name, which the domain refuses
+        CreateGroupCommand command = new CreateGroupCommand(
+                creatorId, "  ", null, List.of(participantId));
+
+        // When the CreateGroup use case is executed
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> useCase.execute(command));
+
+        // Then the domain error is propagated
+        assertEquals("Group name is required", error.getMessage());
+        // And no group is saved
+        assertTrue(repository.saved.isEmpty());
     }
 
     private static UserId userId() {
