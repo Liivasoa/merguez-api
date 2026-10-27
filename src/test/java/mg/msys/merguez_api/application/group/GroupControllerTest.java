@@ -118,4 +118,38 @@ class GroupControllerTest {
         // And the use case was never executed
         verifyNoInteractions(createGroupUseCase);
     }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = { "absent", "empty", "creator only" })
+    @DisplayName("POST /api/v1/groups without any participant other than the creator returns 400 ProblemDetail and does not execute the use case")
+    void createGroupWithoutParticipantReturnsBadRequest(String case_) throws Exception {
+        // Given a creator "Alice" with a valid group name
+        UserId creatorId = new UserId(UUID.randomUUID());
+        // And participantIds is absent, empty, or contains only Alice
+        String participantIdsJson = switch (case_) {
+            case "absent" -> "null";
+            case "empty" -> "[]";
+            default -> "[\"%s\"]".formatted(creatorId.value());
+        };
+        String requestBody = """
+                {
+                  "creatorId": "%s",
+                  "name": "Dojo du mardi",
+                  "participantIds": %s
+                }
+                """.formatted(creatorId.value(), participantIdsJson);
+
+        // When POST /api/v1/groups is called
+        var result = mockMvc.perform(post("/api/v1/groups")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody));
+
+        // Then the response is 400 Bad Request
+        result.andExpect(status().isBadRequest())
+                // And the body is an RFC 9457 ProblemDetail
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400));
+        // And the use case was never executed
+        verifyNoInteractions(createGroupUseCase);
+    }
 }
