@@ -3,8 +3,10 @@ package mg.msys.merguez_api.application.group;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -14,6 +16,9 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -80,5 +85,37 @@ class GroupControllerTest {
         assertEquals(
                 new CreateGroupCommand(creatorId, "Dojo du mardi", "Séances entre amis", List.of(participantId)),
                 commandCaptor.getValue());
+    }
+
+    @ParameterizedTest(name = "name = [{0}]")
+    @NullSource
+    @ValueSource(strings = { "", "   " })
+    @DisplayName("POST /api/v1/groups with an absent, empty or blank name returns 400 ProblemDetail and does not execute the use case")
+    void createGroupWithMissingNameReturnsBadRequest(String name) throws Exception {
+        // Given a creator "Alice" and a participant "Bob"
+        UserId creatorId = new UserId(UUID.randomUUID());
+        UserId participantId = new UserId(UUID.randomUUID());
+        // And a creation request whose name is absent, empty or only whitespace
+        String nameJson = name == null ? "null" : "\"" + name + "\"";
+        String requestBody = """
+                {
+                  "creatorId": "%s",
+                  "name": %s,
+                  "participantIds": ["%s"]
+                }
+                """.formatted(creatorId.value(), nameJson, participantId.value());
+
+        // When POST /api/v1/groups is called
+        var result = mockMvc.perform(post("/api/v1/groups")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody));
+
+        // Then the response is 400 Bad Request
+        result.andExpect(status().isBadRequest())
+                // And the body is an RFC 9457 ProblemDetail
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400));
+        // And the use case was never executed
+        verifyNoInteractions(createGroupUseCase);
     }
 }

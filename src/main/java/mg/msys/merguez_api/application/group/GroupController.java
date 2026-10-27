@@ -2,6 +2,7 @@ package mg.msys.merguez_api.application.group;
 
 import java.net.URI;
 
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,7 +24,7 @@ public class GroupController {
     }
 
     @PostMapping
-    public ResponseEntity<GroupResponse> createGroup(@RequestBody CreateGroupRequest request) {
+    public ResponseEntity<GroupResponse> createGroup(@Valid @RequestBody CreateGroupRequest request) {
         Group group = createGroupUseCase.execute(request.toCommand());
 
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()

@@ -1,3 +1,6 @@
 spring:
+  mvc:
+    problemdetails:
+      enabled: true
   application:
     name: merguez-api
