@@ -33,6 +33,11 @@ public final class Group {
         return new Group(GroupId.random(), name, description, creator, participants);
     }
 
+    // For persistence adapters: rebuilds an existing group and bypasses creation validation
+    public static Group restore(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
+        return new Group(id, name, description, creator, participants);
+    }
+
     private static void requireName(String name) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Group name is required");
