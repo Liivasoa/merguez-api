@@ -152,4 +152,36 @@ class GroupControllerTest {
         // And the use case was never executed
         verifyNoInteractions(createGroupUseCase);
     }
+
+    @Test
+    @DisplayName("POST /api/v1/groups refused by the domain returns 400 ProblemDetail carrying the domain message")
+    void createGroupRefusedByDomainReturnsBadRequest() throws Exception {
+        // Given a creator "Alice" and a participant "Bob"
+        UserId creatorId = new UserId(UUID.randomUUID());
+        UserId participantId = new UserId(UUID.randomUUID());
+        // And the CreateGroup use case refuses the request with a domain exception
+        when(createGroupUseCase.execute(any(CreateGroupCommand.class)))
+                .thenThrow(new IllegalArgumentException("Group name is required"));
+        // And a syntactically valid creation request
+        String requestBody = """
+                {
+                  "creatorId": "%s",
+                  "name": "Dojo du mardi",
+                  "participantIds": ["%s"]
+                }
+                """.formatted(creatorId.value(), participantId.value());
+
+        // When POST /api/v1/groups is called
+        var result = mockMvc.perform(post("/api/v1/groups")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody));
+
+        // Then the response is 400 Bad Request
+        result.andExpect(status().isBadRequest())
+                // And the body is an RFC 9457 ProblemDetail
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400))
+                // And the detail carries the domain message
+                .andExpect(jsonPath("$.detail").value("Group name is required"));
+    }
 }
