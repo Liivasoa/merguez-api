@@ -81,5 +81,10 @@ class CreateGroupUseCaseTest {
         public void save(Group group) {
             saved.add(group);
         }
+
+        @Override
+        public Optional<Group> findById(GroupId id) {
+            return saved.stream().filter(group -> group.id().equals(id)).findFirst();
+        }
     }
 }
