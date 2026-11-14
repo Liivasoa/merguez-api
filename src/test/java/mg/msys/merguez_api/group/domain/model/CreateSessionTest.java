@@ -105,4 +105,19 @@ class CreateSessionTest {
         assertNotNull(exception.getMessage());
         assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("day"));
     }
+
+    @Test
+    @DisplayName("Session creation is refused when the start time is missing")
+    void groupMemberCannotCreateSessionWithoutStartTime() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", admin, List.of(member));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> group.createSession(member, "Evening training", DayOfWeek.TUESDAY, null));
+
+        assertNotNull(exception.getMessage());
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("time"));
+    }
 }
