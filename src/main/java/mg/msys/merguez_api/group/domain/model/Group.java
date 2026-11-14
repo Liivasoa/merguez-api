@@ -42,7 +42,7 @@ public final class Group {
     }
 
     public Session createSession(UserId requester, String name, DayOfWeek day, LocalTime startTime) {
-        if (name == null) {
+        if (name == null || name.isEmpty()) {
             name = day + " " + startTime;
         }
         return new Session(id, name, day, startTime);
