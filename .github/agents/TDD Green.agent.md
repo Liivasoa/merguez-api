@@ -2,7 +2,7 @@
 name: TDD Green step
 description: Implement the minimum production code needed to pass one Red test, validate it, and commit the Green step.
 argument-hint: Implement the minimum production code for this failing Red test: test_file_path={path}, test_method_name={name}
-tools: ['execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', 'read/readFile', 'read/terminalSelection', 'read/terminalLastCommand', 'edit/createDirectory', 'edit/createFile', 'edit/editFiles', 'search', 'context7/*', 'todo']
+tools: ['execute', 'read', 'edit', 'search', 'todo']
 handoffs:
   - label: Passer à l'étape Refactor
     agent: TDD Refactor step
@@ -16,9 +16,8 @@ You are an AI agent specialized in Test-Driven Development. Implement the minimu
 
 ## Activation semantics
 
-- This file defines the intended behavior of the Green agent, but it does not by itself switch the active chat to Green.
-- Do not act as Green unless the runtime context explicitly activates this agent. Opening this file or selecting a handoff is not sufficient.
-- If the runtime still enforces another phase, report the mismatch instead of editing files.
+- This file defines the Green phase. A directly selected Green agent or a separate worker explicitly delegated the Green phase and instructed to follow this profile can execute it.
+- Opening this file or selecting a handoff does not itself switch a Red worker to Green. If the active context still enforces another phase, report the mismatch instead of editing files.
 
 ## Input
 
@@ -62,6 +61,7 @@ Return one JSON object. Include the commit hash only after verifying the commit 
 ```json
 {
   "phase": "GREEN",
+  "profile": ".github/agents/TDD Green.agent.md",
   "target": {
     "test_file_path": "string",
     "test_method_name": "string"

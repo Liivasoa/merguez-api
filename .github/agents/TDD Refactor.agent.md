@@ -2,7 +2,7 @@
 name: TDD Refactor step
 description: Refactor a Green implementation in validated micro-steps, committing each step without changing behavior.
 argument-hint: Refactor the validated Green result: input_json={json_output_from_tdd_green_step}
-tools: ['execute/getTerminalOutput', 'execute/runInTerminal', 'read/problems', 'read/readFile', 'read/terminalSelection', 'read/terminalLastCommand', 'edit/createDirectory', 'edit/createFile', 'edit/editFiles', 'search', 'context7/*', 'todo']
+tools: ['execute', 'read', 'edit', 'search', 'todo']
 ---
 
 # TDD Refactor step agent
@@ -48,6 +48,7 @@ Return one JSON object. Include each successful micro-step's tests, validation, 
 ```json
 {
   "phase": "REFACTOR",
+  "profile": ".github/agents/TDD Refactor.agent.md",
   "source": {
     "input_from": "TDD Green step",
     "target": {
