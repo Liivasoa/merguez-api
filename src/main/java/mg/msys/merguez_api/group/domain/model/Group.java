@@ -45,6 +45,9 @@ public final class Group {
         if (day == null) {
             throw new IllegalArgumentException("Session day is required");
         }
+        if (startTime == null) {
+            throw new IllegalArgumentException("Session start time is required");
+        }
         if (name == null || name.isEmpty()) {
             name = day + " " + startTime;
         }
