@@ -68,4 +68,23 @@ class CreateSessionTest {
         assertNotEquals(session.name(), sessionWithDifferentDay.name());
         assertNotEquals(session.name(), sessionWithDifferentTime.name());
     }
+
+    @Test
+    @DisplayName("A session with an empty name gets a generated name based on its day and time")
+    void groupMemberCreatesSessionWithEmptyNameAndGetsGeneratedName() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", admin, List.of(member));
+
+        var session = group.createSession(member, "", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        var sessionWithDifferentDay =
+                group.createSession(member, "", DayOfWeek.WEDNESDAY, LocalTime.of(14, 0));
+        var sessionWithDifferentTime =
+                group.createSession(member, "", DayOfWeek.TUESDAY, LocalTime.of(15, 0));
+
+        assertEquals(group.id(), session.groupId());
+        assertFalse(session.name().isEmpty());
+        assertNotEquals(session.name(), sessionWithDifferentDay.name());
+        assertNotEquals(session.name(), sessionWithDifferentTime.name());
+    }
 }
