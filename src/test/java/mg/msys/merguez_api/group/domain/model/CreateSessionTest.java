@@ -1,6 +1,9 @@
 package mg.msys.merguez_api.group.domain.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -40,5 +43,21 @@ class CreateSessionTest {
 
         assertEquals(group.id(), session.groupId());
         assertEquals("Entraînement du soir", session.name());
+    }
+
+    @Test
+    @DisplayName("A session without a supplied name gets a generated name")
+    void groupMemberCreatesSessionWithoutNameAndGetsGeneratedName() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", admin, List.of(member));
+
+        var session = group.createSession(member, null, DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertEquals(group.id(), session.groupId());
+        assertNotNull(session.name());
+        assertFalse(session.name().isBlank());
+        assertTrue(session.name().contains(DayOfWeek.TUESDAY.toString()));
+        assertTrue(session.name().contains(LocalTime.of(14, 0).toString()));
     }
 }
