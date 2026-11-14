@@ -42,6 +42,9 @@ public final class Group {
     }
 
     public Session createSession(UserId requester, String name, DayOfWeek day, LocalTime startTime) {
+        if (day == null) {
+            throw new IllegalArgumentException("Session day is required");
+        }
         if (name == null || name.isEmpty()) {
             name = day + " " + startTime;
         }
