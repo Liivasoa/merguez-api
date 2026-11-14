@@ -136,6 +136,23 @@ class CreateSessionTest {
     }
 
     @Test
+    @DisplayName("Rejecting a duplicate session leaves the original as the group's only session")
+    void rejectingDuplicateSessionLeavesOriginalSessionUnchanged() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", admin, List.of(member));
+        var originalSession =
+                group.createSession(member, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> group.createSession(
+                        member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0)));
+
+        assertEquals(List.of(originalSession), group.sessions());
+    }
+
+    @Test
     @DisplayName("Different groups can create sessions at the same day and time")
     void differentGroupsCanCreateSessionsAtSameDayAndTime() {
         UserId firstAdmin = new UserId(UUID.randomUUID());
