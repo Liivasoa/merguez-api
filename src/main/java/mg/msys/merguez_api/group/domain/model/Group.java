@@ -85,6 +85,10 @@ public final class Group {
         return Optional.ofNullable(description);
     }
 
+    public List<Session> sessions() {
+        return List.copyOf(sessions);
+    }
+
     public List<GroupMember> members() {
         return Stream.concat(
                         Stream.of(new GroupMember(creator, Role.ADMIN)),
