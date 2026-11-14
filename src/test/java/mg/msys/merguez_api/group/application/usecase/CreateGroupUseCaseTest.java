@@ -1,0 +1,95 @@
+package mg.msys.merguez_api.group.application.usecase;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
+import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
+import mg.msys.merguez_api.group.domain.model.Group;
+import mg.msys.merguez_api.group.domain.model.GroupId;
+import mg.msys.merguez_api.user.domain.model.UserId;
+
+class CreateGroupUseCaseTest {
+
+    @Test
+    @DisplayName("The use case creates the group and saves it through the repository")
+    void useCaseCreatesAndSavesGroup() {
+        // Given a creator "Alice" and a participant "Bob"
+        UserId creatorId = userId();
+        UserId participantId = userId();
+        // And a group repository
+        InMemoryGroupRepository repository = new InMemoryGroupRepository();
+        CreateGroupUseCase useCase = new CreateGroupUseCase(repository);
+        // And a command to create the group "Dojo du mardi" with a description and Bob as a participant
+        CreateGroupCommand command = new CreateGroupCommand(
+                creatorId, "Dojo du mardi", "Séances entre amis", List.of(participantId));
+
+        // When the CreateGroup use case is executed
+        Group result = useCase.execute(command);
+
+        // Then the returned group has a generated id
+        assertNotNull(result.id());
+        // And the name "Dojo du mardi"
+        assertEquals("Dojo du mardi", result.name());
+        // And the description "Séances entre amis"
+        assertEquals(Optional.of("Séances entre amis"), result.description());
+        // And Alice is admin
+        assertTrue(result.isAdmin(creatorId));
+        // And Bob is a member
+        assertTrue(result.isMember(participantId));
+        // And the group is saved through the repository
+        assertEquals(List.of(result), repository.saved);
+    }
+
+    @Test
+    @DisplayName("The use case propagates the domain refusal and saves nothing")
+    void useCaseDoesNotSaveAnythingWhenTheDomainRefusesTheRequest() {
+        // Given a creator and a participant
+        UserId creatorId = userId();
+        UserId participantId = userId();
+        // And a group repository
+        InMemoryGroupRepository repository = new InMemoryGroupRepository();
+        CreateGroupUseCase useCase = new CreateGroupUseCase(repository);
+        // And a command with a blank name, which the domain refuses
+        CreateGroupCommand command = new CreateGroupCommand(
+                creatorId, "  ", null, List.of(participantId));
+
+        // When the CreateGroup use case is executed
+        InvalidGroupException error = assertThrows(InvalidGroupException.class, () -> useCase.execute(command));
+
+        // Then the domain error is propagated
+        assertEquals("Group name is required", error.getMessage());
+        // And no group is saved
+        assertTrue(repository.saved.isEmpty());
+    }
+
+    private static UserId userId() {
+        return new UserId(UUID.randomUUID());
+    }
+
+    private static class InMemoryGroupRepository implements GroupRepository {
+
+        private final List<Group> saved = new ArrayList<>();
+
+        @Override
+        public void save(Group group) {
+            saved.add(group);
+        }
+
+        @Override
+        public Optional<Group> findById(GroupId id) {
+            return saved.stream().filter(group -> group.id().equals(id)).findFirst();
+        }
+    }
+}
