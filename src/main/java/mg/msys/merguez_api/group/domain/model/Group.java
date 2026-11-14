@@ -1,5 +1,7 @@
 package mg.msys.merguez_api.group.domain.model;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -37,6 +39,10 @@ public final class Group {
     // For persistence adapters: rebuilds an existing group and bypasses creation validation
     public static Group restore(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
         return new Group(id, name, description, creator, participants);
+    }
+
+    public Session createSession(UserId requester, String name, DayOfWeek day, LocalTime startTime) {
+        return new Session(id, name, day, startTime);
     }
 
     private static void requireName(String name) {
