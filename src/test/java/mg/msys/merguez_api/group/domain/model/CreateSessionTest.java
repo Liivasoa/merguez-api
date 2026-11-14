@@ -134,4 +134,27 @@ class CreateSessionTest {
                 () -> group.createSession(
                         member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0)));
     }
+
+    @Test
+    @DisplayName("Different groups can create sessions at the same day and time")
+    void differentGroupsCanCreateSessionsAtSameDayAndTime() {
+        UserId firstAdmin = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        Group firstGroup = Group.create("Dojo du mardi", firstAdmin, List.of(firstMember));
+        var firstSession = firstGroup.createSession(
+                firstMember, "First group training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        UserId secondAdmin = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        Group secondGroup = Group.create("Dojo du jeudi", secondAdmin, List.of(secondMember));
+        var secondSession = secondGroup.createSession(
+                secondMember, "Second group training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertNotEquals(firstGroup.id(), secondGroup.id());
+        assertEquals(firstGroup.id(), firstSession.groupId());
+        assertEquals(secondGroup.id(), secondSession.groupId());
+        assertEquals("Second group training", secondSession.name());
+        assertEquals(DayOfWeek.TUESDAY, secondSession.day());
+        assertEquals(LocalTime.of(14, 0), secondSession.startTime());
+    }
 }
