@@ -157,4 +157,16 @@ class CreateSessionTest {
         assertEquals(DayOfWeek.TUESDAY, secondSession.day());
         assertEquals(LocalTime.of(14, 0), secondSession.startTime());
     }
+
+    @Test
+    @DisplayName("A created session appears in its group's sessions")
+    void createdSessionAppearsInGroupSessions() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", admin, List.of(member));
+        var session = group.createSession(
+                member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertTrue(group.sessions().contains(session));
+    }
 }
