@@ -11,7 +11,7 @@ handoffs:
 ---
 <!--
 Améliorations effectuées :
-- Création d'un fichier d'instructions dédiés pour le TDD Red step dans ../agents/instructions/tdd-red-step-guidelines.md
+- Alignement des tests avec AGENTS.md et le style JUnit Jupiter déjà utilisé dans le dépôt
 - Renforcé la règle pour ne pas créer de classe de test pour chaque scenario, mais plutôt ajouter des méthodes de test dans les classes de test existantes lorsque cela est pertinent.
 - Ajout d'une étape de vérification de la cohérence avec les tests existants avant d'éditer, pour éviter les contradictions dans les suites de tests.
 - Clarification des règles sur ce qui compte comme "code de production"
@@ -37,14 +37,16 @@ Your goal is to write a test case that accurately reflects the scenario and is e
     - Production-scope dependencies are forbidden, **except** the ones the user has explicitly approved for the scenario (see "Approved production dependencies" below). Never add any other production-scope dependency; if one is needed, stop and ask the user.
 3. Check if a test file already exists for the scope of this test scenario. 
    - If it exists, append the new test case to the existing file.
-   - If it does not exist, create a new test file under `src/test/java/mg/msys/merguez_api/<layer>/...` (layer = `domain`, `application` or `infrastructure`, mirroring the main packages). The project is a single Maven module: layers are packages, not modules (see `AGENTS.md`). 
+   - If it does not exist, create a new test file under `src/test/java/mg/msys/merguez_api/<businessmodule>/<responsibility>/...`, mirroring the production package. This is a single Maven module; domain, application, and adapter layers are packages, not separate Maven modules (see `AGENTS.md`).
 4. **Run a mandatory coherence check with existing tests and scenarios before editing.**
     - On every invocation, inspect related existing tests and feature/issue documents in the repository (same module, same endpoint/use case, same aggregate).
     - Do not rely on chat/session memory to infer previous decisions.
     - If the new scenario conflicts with existing tests (e.g. auth assumptions, status codes, payload contracts), update the previously created related tests so the whole suite remains coherent.
-5. Write the test case so it accurately reflects the scenario and is expected to fail initially. You MUST Follow the testing guidelines for the module you are currently working on `docs/agents/instructions/tdd-red-step-guidelines.md`
+5. Write the test case so it accurately reflects the scenario and is expected to fail initially. Follow `AGENTS.md` and the existing JUnit Jupiter test style; use English for code and test names.
 6. Run the test to confirm it fails. A compilation failure (referencing classes that do not exist yet) is a valid red state.
-7. Before ending the turn, summarize the changes made in the required format. You should include : 
+7. Inspect `git status` and the staged diff. Stage only the test file and any necessary test-scope dependency changes made for this Red step. Preserve unrelated changes; if a target file already has unrelated uncommitted edits, stop and report the conflict rather than including them.
+8. After confirming the expected Red failure, commit this step with a Conventional Commit subject (for example, `test(group): cover group creation`) and trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`. Verify the commit exists.
+9. Before ending the turn, summarize the changes made in the required format. You should include:
     - A brief description of the test scenario implemented.
     - The file path where the test was created or modified.
     - the name of the test method you implemented
@@ -89,7 +91,7 @@ For this feature the user explicitly approved adding, in `pom.xml`, the producti
 - You **MUST** preserve hexagonal boundaries already introduced in the codebase (application orchestrates, domain owns rules, infrastructure implements ports).
 - **NEVER** implement any production code in this step. Your **ONLY** goal is to write a failing test.
 - You **MUST** ensure the test fails when run (compilation failure counts as a failure).
-- The name of the test method should be descriptive and follow the naming conventions outlined in the testing guidelines.
+- The test method name should be descriptive and follow the existing JUnit style; use English for code and test names as required by `AGENTS.md`.
 
 ## HARD STOP — What counts as "production code" (FORBIDDEN in this step)
 
@@ -125,7 +127,13 @@ The summary of changes made to be returned at the end of the turn :
 {
   "description": <short description of the test scenario implemented>,
   "test_file_path": <test file path>,
-  "test_method_name": <test method name>
+  "test_method_name": <test method name>,
+  "red_failure": <command and evidence that the intended test failed>,
+  "commit": {
+    "hash": <verified commit hash>,
+    "message": <commit subject>,
+    "files": [<files included in this Red commit>]
+  }
 }
 ```
 
@@ -134,7 +142,13 @@ The summary of changes made to be returned at the end of the turn :
 {
   "description": "Successfully export contacts",
   "test_file_path": "src/test/java/mg/msys/merguez_api/domain/contact/ContactExportUseCaseTest.java",
-  "test_method_name": "shouldProduceExportDtoWhenContactsExist"
+  "test_method_name": "shouldProduceExportDtoWhenContactsExist",
+  "red_failure": "mvnw -Dtest=ContactExportUseCaseTest test: expected missing export behavior",
+  "commit": {
+    "hash": "verified-hash",
+    "message": "test(contact): cover contact export",
+    "files": ["src/test/java/mg/msys/merguez_api/domain/contact/ContactExportUseCaseTest.java"]
+  }
 }
 ```
 ```
