@@ -3,7 +3,7 @@ package mg.msys.merguez_api.group.domain.model;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -53,11 +53,19 @@ class CreateSessionTest {
         Group group = Group.create("Dojo du mardi", admin, List.of(member));
 
         var session = group.createSession(member, null, DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        var sessionWithDifferentDay =
+                group.createSession(member, null, DayOfWeek.WEDNESDAY, LocalTime.of(14, 0));
+        var sessionWithDifferentTime =
+                group.createSession(member, null, DayOfWeek.TUESDAY, LocalTime.of(15, 0));
 
         assertEquals(group.id(), session.groupId());
         assertNotNull(session.name());
         assertFalse(session.name().isBlank());
-        assertTrue(session.name().contains(DayOfWeek.TUESDAY.toString()));
-        assertTrue(session.name().contains(LocalTime.of(14, 0).toString()));
+        assertNotNull(sessionWithDifferentDay.name());
+        assertFalse(sessionWithDifferentDay.name().isBlank());
+        assertNotNull(sessionWithDifferentTime.name());
+        assertFalse(sessionWithDifferentTime.name().isBlank());
+        assertNotEquals(session.name(), sessionWithDifferentDay.name());
+        assertNotEquals(session.name(), sessionWithDifferentTime.name());
     }
 }
