@@ -8,8 +8,8 @@ description: Create an issue in the form of a markdown file with title, descript
 2. Extract context, explicit rules, and success criteria from the request.
 3. Build a rule coverage checklist before writing anything. You MUST list every business rule found in the request and map each one to at least one acceptance criterion or note.
 4. Ask clarifying questions only if a blocker prevents writing valid scenarios. If the request is actionable, do not ask extra questions and proceed directly.
-5. Identify impacted modules.
-6. If `domain` is impacted, it MUST be processed first and completed before starting `application` or `infrastructure`.
+5. Identify impacted layers (`domain`, `application`, `adapter/in`, `adapter/out`) within the business module.
+6. If `domain` is impacted, it MUST be processed first and completed before starting `application` or `adapter`.
 7. Generate issues in this mandatory order:
     1. `domain` first (mandatory when impacted):
         1. Summarize business context and invariants.
@@ -23,16 +23,17 @@ description: Create an issue in the form of a markdown file with title, descript
         4. Avoid 1:1 domain-to-application scenario mirroring unless technically justified.
         5. Do not invent new business rules not present in domain outputs.
         6. Create `docs/features/{feature_name}/application_{issue_title}.md`.
-    3. `infrastructure` third (if impacted):
+    3. `adapter` third (if impacted), either or both of:
+        - `adapter/in` (inbound: REST, messaging, scheduling, cli): focus on request/response mapping, structural validation, and invocation of use cases.
+        - `adapter/out` (outbound: persistence, client, messaging): focus on persistence, external integration mechanics, and translation of technical failures.
         1. Derive scenarios from the completed domain scenarios only.
-        2. Focus on persistence, adapters, integration mechanics, and technical failure handling.
-        3. Group domain scenarios when they share the same technical treatment in adapters/persistence.
-        4. Avoid 1:1 domain-to-infrastructure scenario mirroring unless technically justified.
-        5. Do not invent new business rules not present in domain outputs.
-        6. Create `docs/features/{feature_name}/infrastructure_{issue_title}.md`.
-8. For each generated module issue:
+        2. Group domain scenarios when they share the same technical treatment within the same adapter.
+        3. Avoid 1:1 domain-to-adapter scenario mirroring unless technically justified.
+        4. Do not invent new business rules not present in domain outputs.
+        5. Create `docs/features/{feature_name}/adapter_in_{issue_title}.md` and/or `docs/features/{feature_name}/adapter_out_{issue_title}.md`.
+8. For each generated layer issue:
     1. Keep traceability to the originating domain scenario IDs/headings.
-    2. For `application` and `infrastructure` scenarios, add an explicit reference line directly under each numbered scenario header using this exact format: `Ref Domain: D<id>[, D<id>...]`.
+    2. For `application` and `adapter` scenarios, add an explicit reference line directly under each numbered scenario header using this exact format: `Ref Domain: D<id>[, D<id>...]`.
     3. Generate a concise title and structured description.
     4. Produce 1..N Gherkin scenarios following the mandatory presentation format below.
     5. Use the `templates/issue.md` template.
@@ -53,17 +54,17 @@ description: Create an issue in the form of a markdown file with title, descript
 # Mandatory Domain-First Orchestration
 
 - `domain` is the source of truth for business behavior.
-- `application` and `infrastructure` are downstream issues and MUST be derived from `domain`.
-- If multiple modules are impacted and `domain` is not generated first, stop and fix the order.
-- If only technical modules are requested but business rules are ambiguous, force creation of a domain issue first (or ask clarifying questions).
-- Every `application` and `infrastructure` scenario must reference at least one domain scenario.
-- `application` and `infrastructure` issues may split or regroup domain scenarios for technical clarity, but they must preserve the same business intent.
-- `application` and `infrastructure` must be written from a technical-responsibility perspective (contract/orchestration/validation/mapping for application; adapters/persistence/integration failure handling for infrastructure), not as a business-case-by-business-case rewrite.
+- `application` and `adapter` are downstream issues and MUST be derived from `domain`.
+- If multiple layers are impacted and `domain` is not generated first, stop and fix the order.
+- If only technical layers are requested but business rules are ambiguous, force creation of a domain issue first (or ask clarifying questions).
+- Every `application` and `adapter` scenario must reference at least one domain scenario.
+- `application` and `adapter` issues may split or regroup domain scenarios for technical clarity, but they must preserve the same business intent.
+- `application` and `adapter` must be written from a technical-responsibility perspective (contract/orchestration/validation/mapping for application; request mapping/validation for adapter/in; persistence/integration failure handling for adapter/out), not as a business-case-by-business-case rewrite.
 - If multiple domain scenarios are handled by the same technical flow, they MUST be grouped under one technical scenario with multiple domain references.
 - 1:1 mapping between domain scenarios and technical scenarios is a last resort and requires explicit technical justification.
 - The reference format is mandatory and strict: `Ref Domain: D<id>[, D<id>...]`.
 
-In particular for the `domain` module:
+In particular for the `domain` layer:
 
 - If the request contains pricing, tariff, cost, token-consumption, free-item, or premium/standard rules, the domain issue MUST contain explicit acceptance criteria for the pricing policy itself, not only aggregate order totals.
 - The domain issue MUST make the business invariant visible as a first-class concern. For example, a tariff matrix must appear as dedicated scenarios or an explicitly named section of acceptance criteria.
@@ -76,11 +77,11 @@ Before finalizing, ask yourself these mandatory checks:
 - If the feature defines state-dependent behavior, are the allowed and forbidden transitions both covered?
 - If the feature defines refunds or pooled contributions, are their effects represented explicitly?
 - **Is there at least one happy-path ("nominal"/"baseline") scenario that covers the simplest successful case?** Even if not explicitly mentioned in the spec, add a basic scenario showing the happy path. This ensures robust baseline coverage and catches regressions.
-- If `application` and/or `infrastructure` issues were generated, do all their scenarios map back to at least one completed domain scenario?
-- Are `application` and `infrastructure` scenarios technical derivations (contract, validation, mapping, adapter, persistence, integration failures) rather than new business-rule definitions?
-- Did I avoid unnecessary 1:1 mirroring of domain scenarios in `application` and `infrastructure`?
+- If `application` and/or `adapter` issues were generated, do all their scenarios map back to at least one completed domain scenario?
+- Are `application` and `adapter` scenarios technical derivations (contract, validation, mapping, adapter, persistence, integration failures) rather than new business-rule definitions?
+- Did I avoid unnecessary 1:1 mirroring of domain scenarios in `application` and `adapter`?
 - Where domain scenarios share the same technical processing path, did I aggregate them into a single technical scenario with multiple `Ref Domain` IDs?
-- Do all `application` and `infrastructure` scenarios include a strict `Ref Domain: D<id>[, D<id>...]` line?
+- Do all `application` and `adapter` scenarios include a strict `Ref Domain: D<id>[, D<id>...]` line?
 
 # Mandatory Gherkin Presentation
 For readability and consistency, every generated issue MUST present acceptance criteria using this structure:
@@ -89,7 +90,7 @@ For readability and consistency, every generated issue MUST present acceptance c
 2. Numbered scenario headings in markdown, one per scenario:
    - `1. Scenario Header`
    - `2. Scenario Header`
-3. For `application` and `infrastructure` issues, add `Ref Domain: D<id>[, D<id>...]` directly below each numbered scenario heading.
+3. For `application` and `adapter` issues, add `Ref Domain: D<id>[, D<id>...]` directly below each numbered scenario heading.
 4. Immediately under each heading (and after `Ref Domain` when required), add a real Gherkin block starting with `Scenario:` and then `Given`, `When`, `Then` (and optional `And`).
 5. Keep one blank line between scenarios.
 
@@ -118,7 +119,7 @@ Then <expected result>
 Do not output plain prose-only acceptance criteria. Every scenario must be expressed in Gherkin syntax.
     
 # Note
-- This skill is intended to create manageable issue. Typically, it should not span more than one module. 
-- If the request is too broad, propose the user to break it down per module
+- This skill is intended to create manageable issue. Typically, it should not span more than one business module.
+- If the request is too broad, propose the user to break it down per business module
 - Completeness of business rules matters more than minimizing the number of scenarios. Prefer a few extra precise scenarios over a concise but incomplete issue.
 - Never introduce features not yet managed by the current scope. Keep issues aligned with the requested implementation phase only.

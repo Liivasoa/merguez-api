@@ -3,10 +3,10 @@
 Input: "The user wants to export their contacts list to CSV"
 
 Output:
-Three files, one per module : one for the domain, one for the application, one for the infrastructure.
+Three files, one per layer : one for the domain, one for the application, one for the adapter (out, for the CSV export).
 
 Note:
-- In `application` and `infrastructure`, do not mirror each domain scenario 1:1 by default.
+- In `application` and `adapter`, do not mirror each domain scenario 1:1 by default.
 - Group multiple domain scenarios into one technical scenario when they share the same technical processing path.
 - Keep traceability with `Ref Domain: D<id>[, D<id>...]` for each technical scenario.
 - Do not add technical concerns that are not explicitly requested by the feature (for example auth, retries, scheduler, or operational batch jobs).
@@ -51,9 +51,9 @@ Feature: Export contacts list
     Then the application layer returns a 204 No Content response
 ```
 
-file `docs/features/export-contacts/infrastructure_export-contacts-issue.md`
+file `docs/features/export-contacts/adapter_out_export-contacts-issue.md`
 ```markdown
-# Export Contacts List : Infrastructure Module impact
+# Export Contacts List : Adapter Out impact
 **Context**
 The user wants to export their contacts list to CSV.
 **Acceptance Criteria**

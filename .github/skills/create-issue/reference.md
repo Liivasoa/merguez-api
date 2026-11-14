@@ -6,7 +6,7 @@ Each issue is a standalone Markdown file with the following sections:
 
 | Section | Required | Description |
 |---|---|---|
-| `# Title` | ✅ | Concise title of the issue. Include the impacted module name when the feature spans multiple modules. |
+| `# Title` | ✅ | Concise title of the issue. Include the impacted business module name when the feature spans multiple business modules. |
 | `**Contexte**` | ✅ | Functional context explaining *why* the issue exists and *who* it concerns. |
 | `**Critères d'acceptation**` | ✅ | A Gherkin `Feature:` block with 1–N `Scenario:` entries covering the happy path and edge cases. |
 | `**Notes**` | ❌ | Optional. Any additional references, constraints, or open questions. |
@@ -14,7 +14,7 @@ Each issue is a standalone Markdown file with the following sections:
 ## Domain to technical derivation rules (Hexagonal)
 
 - The `domain` issue captures business behavior in detail and is the source of truth.
-- `application` and `infrastructure` issues are technical derivations and must not mirror every domain scenario one-by-one by default.
+- `application` and `adapter` issues are technical derivations and must not mirror every domain scenario one-by-one by default.
 - If several domain scenarios follow the same technical path, group them into one technical scenario and reference all related domain IDs.
 - Use this mandatory traceability line under each technical scenario header: `Ref Domain: D<id>[, D<id>...]`.
 - A strict 1:1 mapping from domain to technical scenarios is allowed only when there is a real technical difference (different endpoint contract, different validation rule, different adapter behavior, etc.).
