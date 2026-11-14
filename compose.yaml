@@ -3,3 +3,10 @@ services:
     image: mongo:7.0
     ports:
       - '27017:27017'
+    environment:
+      MONGO_INITDB_DATABASE: merguez
+    volumes:
+      - mongodb-data:/data/db
+
+volumes:
+  mongodb-data:

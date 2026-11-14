@@ -16,7 +16,7 @@ There is no dedicated lint command configured in `pom.xml`.
 
 This is currently a minimal Spring Boot application. `MerguezApiApplication` is the `@SpringBootApplication` entry point in `mg.msys.merguez_api`; `application.yaml` sets the Spring application name. The only test is a Spring context-load test in the same package. No API, domain, persistence, or service layers have been established yet.
 
-The POM inherits dependency and plugin management from the Spring Boot parent. Docker Compose support is included as an optional runtime dependency, but `compose.yaml` currently declares no services; `HELP.md` notes this may prevent the application from starting.
+The POM inherits dependency and plugin management from the Spring Boot parent. Docker Compose support is included as an optional runtime dependency. `compose.yaml` declares a `mongodb` service (`mongo:7.0`, database `merguez`, persistent volume), and `application.yaml` sets `spring.data.mongodb.uri` from the `MONGODB_URI` environment variable (default `mongodb://localhost:27017/merguez`).
 
 ## Repository conventions
 
