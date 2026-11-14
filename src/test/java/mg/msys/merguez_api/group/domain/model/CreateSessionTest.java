@@ -27,4 +27,18 @@ class CreateSessionTest {
         assertEquals(group.id(), session.groupId());
         assertEquals("Entraînement du soir", session.name());
     }
+
+    @Test
+    @DisplayName("A group admin creates a named session for their group")
+    void groupAdminCreatesNamedSessionForTheirGroup() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", admin, List.of(member));
+
+        var session = group.createSession(
+                admin, "Entraînement du soir", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertEquals(group.id(), session.groupId());
+        assertEquals("Entraînement du soir", session.name());
+    }
 }
