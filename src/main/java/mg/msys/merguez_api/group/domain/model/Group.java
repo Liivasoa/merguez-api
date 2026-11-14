@@ -2,6 +2,7 @@ package mg.msys.merguez_api.group.domain.model;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -17,6 +18,7 @@ public final class Group {
     private final String description;
     private final UserId creator;
     private final List<UserId> participants;
+    private final List<Session> sessions = new ArrayList<>();
 
     private Group(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
         this.id = id;
@@ -48,10 +50,15 @@ public final class Group {
         if (startTime == null) {
             throw new IllegalArgumentException("Session start time is required");
         }
+        if (sessions.stream().anyMatch(session -> session.day().equals(day) && session.startTime().equals(startTime))) {
+            throw new IllegalStateException("A session already exists at this day and start time");
+        }
         if (name == null || name.isEmpty()) {
             name = day + " " + startTime;
         }
-        return new Session(id, name, day, startTime);
+        Session session = new Session(id, name, day, startTime);
+        sessions.add(session);
+        return session;
     }
 
     private static void requireName(String name) {
