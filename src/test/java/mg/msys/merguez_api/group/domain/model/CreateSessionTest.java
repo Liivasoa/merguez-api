@@ -120,4 +120,18 @@ class CreateSessionTest {
         assertNotNull(exception.getMessage());
         assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("time"));
     }
+
+    @Test
+    @DisplayName("A group rejects a second session with the same day and time regardless of name")
+    void groupRejectsSecondSessionWithSameDayAndTimeEvenWhenNameDiffers() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", admin, List.of(member));
+        group.createSession(member, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertThrows(
+                RuntimeException.class,
+                () -> group.createSession(
+                        member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0)));
+    }
 }
