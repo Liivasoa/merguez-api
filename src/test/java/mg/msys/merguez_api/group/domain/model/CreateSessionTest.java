@@ -4,10 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -86,5 +89,20 @@ class CreateSessionTest {
         assertFalse(session.name().isEmpty());
         assertNotEquals(session.name(), sessionWithDifferentDay.name());
         assertNotEquals(session.name(), sessionWithDifferentTime.name());
+    }
+
+    @Test
+    @DisplayName("Session creation is refused when the day is missing")
+    void groupMemberCannotCreateSessionWithoutDay() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", admin, List.of(member));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> group.createSession(member, "Evening training", null, LocalTime.of(14, 0)));
+
+        assertNotNull(exception.getMessage());
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("day"));
     }
 }
