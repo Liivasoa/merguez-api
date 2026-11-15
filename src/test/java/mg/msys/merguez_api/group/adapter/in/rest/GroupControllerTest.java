@@ -1,10 +1,13 @@
 package mg.msys.merguez_api.group.adapter.in.rest;
 
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -118,6 +121,40 @@ class GroupControllerTest {
         return Stream.of(
                 Arguments.of("day", "\"startTime\": \"14:30\""),
                 Arguments.of("start time", "\"day\": \"TUESDAY\""));
+    }
+
+    @Test
+    @DisplayName("GET group sessions includes the created session at the mocked application boundary")
+    void getGroupSessionsIncludesCreatedSession() throws Exception {
+        GroupId groupId = GroupId.random();
+        UserId requester = new UserId(UUID.randomUUID());
+        LocalTime startTime = LocalTime.of(14, 30);
+        Session session = new Session(groupId, "Evening training", DayOfWeek.TUESDAY, startTime);
+        when(createSessionUseCase.execute(any(CreateSessionCommand.class))).thenReturn(session);
+        when(getGroupSessionsUseCase.execute(groupId)).thenReturn(List.of(session));
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "name": "Evening training",
+                  "day": "TUESDAY",
+                  "startTime": "14:30"
+                }
+                """.formatted(requester.value());
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/sessions", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().is2xxSuccessful());
+        verify(createSessionUseCase).execute(new CreateSessionCommand(
+                groupId, requester, session.name(), session.day(), startTime));
+
+        mockMvc.perform(get("/api/v1/groups/{groupId}/sessions", groupId.value()))
+                .andExpect(status().is2xxSuccessful())
+                .andExpect(jsonPath("$[0].groupId").value(groupId.value().toString()))
+                .andExpect(jsonPath("$[0].name").value(session.name()))
+                .andExpect(jsonPath("$[0].day").value("TUESDAY"))
+                .andExpect(jsonPath("$[0].startTime").value(anyOf(is("14:30"), is("14:30:00"))));
+        verify(getGroupSessionsUseCase).execute(groupId);
     }
 
     @Test
