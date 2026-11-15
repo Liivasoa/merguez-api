@@ -1,6 +1,7 @@
 package mg.msys.merguez_api.group.application.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -46,6 +47,29 @@ class CreateSessionUseCaseTest {
         assertEquals(1, repository.savedSessionLists.size());
         assertEquals(List.of(result), repository.savedSessionLists.getFirst());
         assertEquals(List.of(result), group.sessions());
+    }
+
+    @ParameterizedTest
+    @MethodSource("missingSchedulingInformation")
+    void rejectsMissingSchedulingInformationWithoutSavingGroup(DayOfWeek day, LocalTime startTime) {
+        UserId admin = userId();
+        GroupId groupId = GroupId.random();
+        Group group = Group.restore(groupId, "Dojo du mardi", null, admin, List.of(userId()));
+        InMemoryGroupRepository repository = new InMemoryGroupRepository(group);
+        CreateSessionUseCase useCase = new CreateSessionUseCase(repository);
+        CreateSessionCommand command =
+                new CreateSessionCommand(groupId, admin, "Evening training", day, startTime);
+
+        assertThrows(IllegalArgumentException.class, () -> useCase.execute(command));
+
+        assertEquals(0, repository.savedSessionLists.size());
+        assertEquals(List.of(), group.sessions());
+    }
+
+    private static Stream<Arguments> missingSchedulingInformation() {
+        return Stream.of(
+                Arguments.of(null, LocalTime.of(14, 0)),
+                Arguments.of(DayOfWeek.TUESDAY, null));
     }
 
     private static Stream<Arguments> validCreationRequests() {
