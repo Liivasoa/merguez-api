@@ -92,6 +92,34 @@ class GroupControllerTest {
                 Arguments.of("empty name", ", \"name\": \"\"", ""));
     }
 
+    @ParameterizedTest(name = "missing {0}")
+    @MethodSource("missingSessionScheduleFields")
+    @DisplayName("POST a group session without a day or start time returns 400 and does not execute the use case")
+    void createSessionWithoutRequiredScheduleFieldReturnsBadRequest(String missingField, String scheduleFields)
+            throws Exception {
+        GroupId groupId = GroupId.random();
+        UserId requester = new UserId(UUID.randomUUID());
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  %s
+                }
+                """.formatted(requester.value(), scheduleFields);
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/sessions", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(createSessionUseCase);
+    }
+
+    private static Stream<Arguments> missingSessionScheduleFields() {
+        return Stream.of(
+                Arguments.of("day", "\"startTime\": \"14:30\""),
+                Arguments.of("start time", "\"day\": \"TUESDAY\""));
+    }
+
     @Test
     @DisplayName("POST /api/v1/groups executes the use case and returns 201 Created with the mapped group")
     void createGroupReturnsCreatedWithMappedResponse() throws Exception {
