@@ -11,12 +11,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -27,9 +32,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
+import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
+import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
+import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 import mg.msys.merguez_api.group.domain.model.Group;
+import mg.msys.merguez_api.group.domain.model.GroupId;
+import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 @WebMvcTest(GroupController.class)
@@ -40,6 +50,47 @@ class GroupControllerTest {
 
     @MockitoBean
     private CreateGroupUseCase createGroupUseCase;
+
+    @MockitoBean
+    private CreateSessionUseCase createSessionUseCase;
+
+    @MockitoBean
+    private GetGroupSessionsUseCase getGroupSessionsUseCase;
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("sessionNames")
+    @DisplayName("POST a group session forwards its group, requester and unchanged details")
+    void createSessionForwardsRequestUnchanged(String caseName, String nameField, String expectedName)
+            throws Exception {
+        GroupId groupId = GroupId.random();
+        UserId requester = new UserId(UUID.randomUUID());
+        DayOfWeek day = DayOfWeek.TUESDAY;
+        LocalTime startTime = LocalTime.of(14, 30);
+        when(createSessionUseCase.execute(any(CreateSessionCommand.class)))
+                .thenReturn(new Session(groupId, "Created session", day, startTime));
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "day": "TUESDAY",
+                  "startTime": "14:30"%s
+                }
+                """.formatted(requester.value(), nameField);
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/sessions", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().is2xxSuccessful());
+
+        verify(createSessionUseCase).execute(
+                new CreateSessionCommand(groupId, requester, expectedName, day, startTime));
+    }
+
+    private static Stream<Arguments> sessionNames() {
+        return Stream.of(
+                Arguments.of("explicit name", ", \"name\": \"Evening training\"", "Evening training"),
+                Arguments.of("absent name", "", null),
+                Arguments.of("empty name", ", \"name\": \"\"", ""));
+    }
 
     @Test
     @DisplayName("POST /api/v1/groups executes the use case and returns 201 Created with the mapped group")
