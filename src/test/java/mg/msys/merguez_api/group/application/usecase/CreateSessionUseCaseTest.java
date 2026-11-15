@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -66,6 +67,39 @@ class CreateSessionUseCaseTest {
         assertEquals(List.of(), group.sessions());
     }
 
+    @Test
+    void rejectsDuplicateSessionWithinGroupButAllowsSameSlotInAnotherGroup() {
+        UserId firstAdmin = userId();
+        UserId firstMember = userId();
+        Group firstGroup =
+                Group.restore(GroupId.random(), "Dojo du mardi", null, firstAdmin, List.of(firstMember));
+        Session existingSession = firstGroup.createSession(
+                firstMember, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        UserId secondAdmin = userId();
+        UserId secondMember = userId();
+        Group secondGroup =
+                Group.restore(GroupId.random(), "Dojo du jeudi", null, secondAdmin, List.of(secondMember));
+        InMemoryGroupRepository repository = new InMemoryGroupRepository(firstGroup, secondGroup);
+        CreateSessionUseCase useCase = new CreateSessionUseCase(repository);
+        CreateSessionCommand duplicateCommand = new CreateSessionCommand(
+                firstGroup.id(), firstMember, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertThrows(IllegalStateException.class, () -> useCase.execute(duplicateCommand));
+
+        assertEquals(List.of(existingSession), firstGroup.sessions());
+        assertEquals(0, repository.savedSessionLists.size());
+
+        CreateSessionCommand otherGroupCommand = new CreateSessionCommand(
+                secondGroup.id(), secondMember, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        Session otherGroupSession = useCase.execute(otherGroupCommand);
+
+        assertEquals(List.of(existingSession), firstGroup.sessions());
+        assertEquals(List.of(otherGroupSession), secondGroup.sessions());
+        assertEquals(List.of(secondGroup.id()), repository.savedGroupIds);
+        assertEquals(List.of(List.of(otherGroupSession)), repository.savedSessionLists);
+    }
+
     private static Stream<Arguments> missingSchedulingInformation() {
         return Stream.of(
                 Arguments.of(null, LocalTime.of(14, 0)),
@@ -84,21 +118,23 @@ class CreateSessionUseCaseTest {
 
     private static class InMemoryGroupRepository implements GroupRepository {
 
-        private final Group group;
+        private final List<Group> groups;
+        private final List<GroupId> savedGroupIds = new ArrayList<>();
         private final List<List<Session>> savedSessionLists = new ArrayList<>();
 
-        private InMemoryGroupRepository(Group group) {
-            this.group = group;
+        private InMemoryGroupRepository(Group... groups) {
+            this.groups = List.of(groups);
         }
 
         @Override
         public void save(Group group) {
+            savedGroupIds.add(group.id());
             savedSessionLists.add(group.sessions());
         }
 
         @Override
         public Optional<Group> findById(GroupId id) {
-            return group.id().equals(id) ? Optional.of(group) : Optional.empty();
+            return groups.stream().filter(group -> group.id().equals(id)).findFirst();
         }
     }
 }
