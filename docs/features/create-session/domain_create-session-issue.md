@@ -15,68 +15,68 @@ En tant qu’administrateur ou membre d’un groupe, je veux créer une séance 
 | Des groupes différents peuvent utiliser le même jour et la même heure de début | D8 |
 | Une séance créée apparaît dans la liste des séances du groupe | D9 |
 
-**Critères d’acceptation**
-Fonctionnalité : créer une séance
+**Critères d'acceptation**
+Feature: créer une séance
 
 1. Un membre du groupe crée une séance nommée
-Scénario : un membre crée une séance pour son groupe
-Étant donné un membre du « Dojo du mardi »
-Lorsque le membre crée une séance nommée « Entraînement du soir » pour mardi à 14 h 00
-Alors la séance est créée dans le « Dojo du mardi »
-Et son nom est « Entraînement du soir »
+Scenario: un membre crée une séance pour son groupe
+Given un membre du « Dojo du mardi »
+When le membre crée une séance nommée « Entraînement du soir » pour mardi à 14 h 00
+Then la séance est créée dans le « Dojo du mardi »
+And son nom est « Entraînement du soir »
 
 2. Un administrateur du groupe crée une séance nommée
-Scénario : un administrateur crée une séance pour son groupe
-Étant donné un administrateur du « Dojo du mardi »
-Lorsque l’administrateur crée une séance nommée « Entraînement du soir » pour mardi à 14 h 00
-Alors la séance est créée dans le « Dojo du mardi »
-Et son nom est « Entraînement du soir »
+Scenario: un administrateur crée une séance pour son groupe
+Given un administrateur du « Dojo du mardi »
+When l’administrateur crée une séance nommée « Entraînement du soir » pour mardi à 14 h 00
+Then la séance est créée dans le « Dojo du mardi »
+And son nom est « Entraînement du soir »
 
 3. Générer un nom lorsqu’aucun nom n’est fourni
-Scénario : une séance sans nom fourni reçoit un nom généré
-Étant donné un membre du « Dojo du mardi »
-Lorsque le membre crée une séance pour mardi à 14 h 00 sans fournir de nom
-Alors la séance est créée
-Et son nom généré est basé sur mardi et 14 h 00
+Scenario: une séance sans nom fourni reçoit un nom généré
+Given un membre du « Dojo du mardi »
+When le membre crée une séance pour mardi à 14 h 00 sans fournir de nom
+Then la séance est créée
+And son nom généré est basé sur mardi et 14 h 00
 
 4. Générer un nom lorsque le nom fourni est vide
-Scénario : une séance avec un nom vide reçoit un nom généré
-Étant donné un membre du « Dojo du mardi »
-Lorsque le membre crée une séance avec un nom vide pour mardi à 14 h 00
-Alors la séance est créée
-Et son nom généré est basé sur mardi et 14 h 00
+Scenario: une séance avec un nom vide reçoit un nom généré
+Given un membre du « Dojo du mardi »
+When le membre crée une séance avec un nom vide pour mardi à 14 h 00
+Then la séance est créée
+And son nom généré est basé sur mardi et 14 h 00
 
 5. Exiger un jour
-Scénario : une séance sans jour n’est pas créée
-Étant donné un membre du « Dojo du mardi »
-Lorsque le membre crée une séance sans jour et avec une heure de début de 14 h 00
-Alors la séance n’est pas créée, car un jour est obligatoire
+Scenario: une séance sans jour n’est pas créée
+Given un membre du « Dojo du mardi »
+When le membre crée une séance sans jour et avec une heure de début de 14 h 00
+Then la séance n’est pas créée, car un jour est obligatoire
 
 6. Exiger une heure de début
-Scénario : une séance sans heure de début n’est pas créée
-Étant donné un membre du « Dojo du mardi »
-Lorsque le membre crée une séance pour mardi sans heure de début
-Alors la séance n’est pas créée, car une heure de début est obligatoire
+Scenario: une séance sans heure de début n’est pas créée
+Given un membre du « Dojo du mardi »
+When le membre crée une séance pour mardi sans heure de début
+Then la séance n’est pas créée, car une heure de début est obligatoire
 
 7. Garantir l’unicité du créneau jour/heure dans un groupe
-Scénario : un groupe ne peut pas avoir deux séances au même jour et à la même heure de début
-Étant donné que le « Dojo du mardi » a déjà une séance le mardi à 14 h 00
-Lorsqu’un membre crée une autre séance dans le « Dojo du mardi » pour mardi à 14 h 00
-Alors le « Dojo du mardi » ne possède toujours qu’une séance le mardi à 14 h 00
-Et aucune deuxième séance n’est créée
+Scenario: un groupe ne peut pas avoir deux séances au même jour et à la même heure de début
+Given le « Dojo du mardi » a déjà une séance le mardi à 14 h 00
+When un membre crée une autre séance dans le « Dojo du mardi » pour mardi à 14 h 00
+Then le « Dojo du mardi » ne possède toujours qu’une séance le mardi à 14 h 00
+And aucune deuxième séance n’est créée
 
 8. Autoriser le même jour et la même heure dans des groupes différents
-Scénario : des groupes différents peuvent avoir des séances le même jour et à la même heure de début
-Étant donné que le « Dojo du mardi » a une séance le mardi à 14 h 00
-Et que le « Dojo du jeudi » n’a pas de séance le mardi à 14 h 00
-Lorsqu’un membre crée une séance dans le « Dojo du jeudi » pour mardi à 14 h 00
-Alors la séance est créée dans le « Dojo du jeudi »
+Scenario: des groupes différents peuvent avoir des séances le même jour et à la même heure de début
+Given le « Dojo du mardi » a une séance le mardi à 14 h 00
+And le « Dojo du jeudi » n’a pas de séance le mardi à 14 h 00
+When un membre crée une séance dans le « Dojo du jeudi » pour mardi à 14 h 00
+Then la séance est créée dans le « Dojo du jeudi »
 
 9. Inclure la séance créée dans la liste des séances du groupe
-Scénario : une séance créée apparaît dans la liste des séances de son groupe
-Étant donné qu’un membre crée une séance dans le « Dojo du mardi » pour mardi à 14 h 00
-Lorsque les séances du « Dojo du mardi » sont consultées
-Alors la séance créée apparaît dans la liste
+Scenario: une séance créée apparaît dans la liste des séances de son groupe
+Given un membre crée une séance dans le « Dojo du mardi » pour mardi à 14 h 00
+When les séances du « Dojo du mardi » sont consultées
+Then la séance créée apparaît dans la liste
 
 **Notes**
 - Le format exact du nom généré n’est pas spécifié ; il doit être basé sur le jour et l’heure de début.

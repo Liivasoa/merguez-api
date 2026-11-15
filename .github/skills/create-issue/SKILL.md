@@ -33,7 +33,7 @@ description: Create an issue in the form of a markdown file with title, descript
         5. Create `docs/features/{feature_name}/adapter_in_{issue_title}.md` and/or `docs/features/{feature_name}/adapter_out_{issue_title}.md`.
 8. For each generated layer issue:
     1. Keep traceability to the originating domain scenario IDs/headings.
-    2. For `application` and `adapter` scenarios, add an explicit reference line directly under each numbered scenario header using this exact format: `Ref Domain: D<id>[, D<id>...]`.
+    2. For `application` and `adapter` scenarios, add an explicit reference line directly under each numbered scenario header using this exact format: `Ref Domain: D<id>[, D<id>...]`. Keep the literal label `Ref Domain:` even when the issue is written in French; do not translate it.
     3. Generate a concise title and structured description.
     4. Produce 1..N Gherkin scenarios following the mandatory presentation format below.
     5. Use the `templates/issue.md` template.
@@ -85,6 +85,8 @@ Before finalizing, ask yourself these mandatory checks:
 
 # Mandatory Gherkin Presentation
 For readability and consistency, every generated issue MUST present acceptance criteria using this structure:
+
+Gherkin keywords must remain literal English even when the issue text is in French: use `Feature:`, `Scenario:`, `Given`, `When`, `Then`, and `And`. Do not translate these keywords; scenario titles and step descriptions may remain in French.
 
 1. A single `Feature:` block at the beginning of `**Critères d'acceptation**` (or `**Acceptance Criteria**`).
 2. Numbered scenario headings in markdown, one per scenario:
