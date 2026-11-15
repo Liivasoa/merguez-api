@@ -100,6 +100,22 @@ class CreateSessionUseCaseTest {
         assertEquals(List.of(List.of(otherGroupSession)), repository.savedSessionLists);
     }
 
+    @Test
+    void includesCreatedSessionWhenRetrievingGroupSessions() {
+        UserId admin = userId();
+        GroupId groupId = GroupId.random();
+        Group group = Group.restore(groupId, "Dojo du mardi", null, admin, List.of(userId()));
+        InMemoryGroupRepository repository = new InMemoryGroupRepository(group);
+        CreateSessionUseCase createSessionUseCase = new CreateSessionUseCase(repository);
+        CreateSessionCommand command =
+                new CreateSessionCommand(groupId, admin, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        Session createdSession = createSessionUseCase.execute(command);
+        List<Session> sessions = new GetGroupSessionsUseCase(repository).execute(groupId);
+
+        assertEquals(List.of(createdSession), sessions);
+    }
+
     private static Stream<Arguments> missingSchedulingInformation() {
         return Stream.of(
                 Arguments.of(null, LocalTime.of(14, 0)),
