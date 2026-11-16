@@ -24,10 +24,15 @@ public final class StartSessionUseCase {
     public SessionOccurrence execute(StartSessionCommand command) {
         Group group = groupRepository.findById(command.groupId())
                 .orElseThrow(() -> new GroupNotFoundException(command.groupId()));
+        var scheduledSession = group.sessions().stream()
+                .filter(session -> session.id().equals(command.scheduledSessionId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Scheduled session not found in group: " + command.scheduledSessionId()));
         if (occurrenceRepository.existsStartedByGroupId(group.id())) {
             throw new IllegalStateException("A session is already started in this group");
         }
-        SessionOccurrence occurrence = group.startSession(command.requester(), command.scheduledSession());
+        SessionOccurrence occurrence = group.startSession(command.requester(), scheduledSession);
         occurrenceRepository.save(occurrence);
         return occurrence;
     }
