@@ -1,6 +1,7 @@
 package mg.msys.merguez_api.group.domain.model;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,6 +64,16 @@ public final class Group {
         Session session = new Session(id, name, day, startTime);
         sessions.add(session);
         return session;
+    }
+
+    public SessionOccurrence startSession(UserId requester, Session scheduledSession) {
+        if (requester == null || (!isAdmin(requester) && !isMember(requester))) {
+            throw new GroupAccessDeniedException("Only group members can start sessions");
+        }
+        if (scheduledSession == null || !sessions.contains(scheduledSession)) {
+            throw new IllegalArgumentException("Scheduled session must belong to this group");
+        }
+        return new SessionOccurrence(id, scheduledSession.id(), Instant.now());
     }
 
     private static void requireName(String name) {
