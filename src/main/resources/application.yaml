@@ -6,6 +6,3 @@ spring:
     name: merguez-api
   mongodb:
     uri: ${MONGODB_URI:mongodb://localhost:27017/merguez}
-  data:
-    mongodb:
-      auto-index-creation: true
