@@ -19,6 +19,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
+import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.model.Group;
@@ -27,6 +28,21 @@ import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class CreateSessionUseCaseTest {
+
+    @Test
+    void rejectsSessionOperationsForMissingGroupWithoutSaving() {
+        GroupId groupId = GroupId.random();
+        InMemoryGroupRepository repository = new InMemoryGroupRepository();
+        CreateSessionUseCase createSessionUseCase = new CreateSessionUseCase(repository);
+        GetGroupSessionsUseCase getGroupSessionsUseCase = new GetGroupSessionsUseCase(repository);
+        CreateSessionCommand command =
+                new CreateSessionCommand(groupId, userId(), "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertAll(
+                () -> assertThrows(GroupNotFoundException.class, () -> createSessionUseCase.execute(command)),
+                () -> assertThrows(GroupNotFoundException.class, () -> getGroupSessionsUseCase.execute(groupId)),
+                () -> assertEquals(0, repository.savedGroupIds.size()));
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"outsider", "otherGroupMember", "null"})
