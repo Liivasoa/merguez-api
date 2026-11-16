@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
@@ -44,6 +45,9 @@ public final class Group {
     }
 
     public Session createSession(UserId requester, String name, DayOfWeek day, LocalTime startTime) {
+        if (requester == null || (!isAdmin(requester) && !isMember(requester))) {
+            throw new GroupAccessDeniedException("Only group members can create sessions");
+        }
         if (day == null) {
             throw new IllegalArgumentException("Session day is required");
         }
