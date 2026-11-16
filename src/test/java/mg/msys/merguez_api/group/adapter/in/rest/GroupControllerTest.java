@@ -1,7 +1,9 @@
 package mg.msys.merguez_api.group.adapter.in.rest;
 
 import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -39,6 +41,7 @@ import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
@@ -93,6 +96,35 @@ class GroupControllerTest {
                 Arguments.of("explicit name", ", \"name\": \"Evening training\"", "Evening training"),
                 Arguments.of("absent name", "", null),
                 Arguments.of("empty name", ", \"name\": \"\"", ""));
+    }
+
+    @Test
+    @DisplayName("POST a group session denied by the use case returns 403 ProblemDetail without sensitive details")
+    void createSessionDeniedForNonMemberReturnsForbidden() throws Exception {
+        GroupId groupId = GroupId.random();
+        UserId requester = new UserId(UUID.randomUUID());
+        String sensitiveDetail = "sensitive internal access details";
+        when(createSessionUseCase.execute(any(CreateSessionCommand.class)))
+                .thenThrow(new GroupAccessDeniedException(sensitiveDetail));
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "name": "Evening training",
+                  "day": "TUESDAY",
+                  "startTime": "14:30"
+                }
+                """.formatted(requester.value());
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/sessions", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(content().string(not(containsString(sensitiveDetail))));
+
+        verify(createSessionUseCase).execute(new CreateSessionCommand(
+                groupId, requester, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 30)));
     }
 
     @ParameterizedTest(name = "missing {0}")
