@@ -4,9 +4,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
 
 @Configuration
 public class GroupConfiguration {
@@ -24,5 +26,12 @@ public class GroupConfiguration {
     @Bean
     GetGroupSessionsUseCase getGroupSessionsUseCase(GroupRepository groupRepository) {
         return new GetGroupSessionsUseCase(groupRepository);
+    }
+
+    @Bean
+    StartSessionUseCase startSessionUseCase(
+            GroupRepository groupRepository,
+            SessionOccurrenceRepository occurrenceRepository) {
+        return new StartSessionUseCase(groupRepository, occurrenceRepository);
     }
 }
