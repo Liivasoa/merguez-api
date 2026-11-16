@@ -21,6 +21,7 @@ public final class Group {
     private final UserId creator;
     private final List<UserId> participants;
     private final List<Session> sessions = new ArrayList<>();
+    private final List<SessionOccurrence> activeOccurrences = new ArrayList<>();
 
     private Group(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
         this.id = id;
@@ -73,7 +74,16 @@ public final class Group {
         if (scheduledSession == null || !sessions.contains(scheduledSession)) {
             throw new IllegalArgumentException("Scheduled session must belong to this group");
         }
-        return new SessionOccurrence(id, scheduledSession.id(), Instant.now());
+        if (!activeOccurrences.isEmpty()) {
+            throw new IllegalStateException("A session is already started in this group");
+        }
+        SessionOccurrence occurrence = new SessionOccurrence(id, scheduledSession.id(), Instant.now());
+        activeOccurrences.add(occurrence);
+        return occurrence;
+    }
+
+    public List<SessionOccurrence> activeOccurrences() {
+        return List.copyOf(activeOccurrences);
     }
 
     private boolean isMemberOrAdmin(UserId requester) {
