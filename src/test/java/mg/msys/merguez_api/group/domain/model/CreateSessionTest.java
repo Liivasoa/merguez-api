@@ -81,6 +81,32 @@ class CreateSessionTest {
     }
 
     @Test
+    @DisplayName("Different groups can each have their own active session occurrence")
+    void differentGroupsCanEachHaveTheirOwnActiveSessionOccurrence() {
+        UserId firstAdmin = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        Group firstGroup = Group.create("Tuesday dojo", firstAdmin, List.of(firstMember));
+        var firstSession =
+                firstGroup.createSession(firstMember, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(9, 0));
+        var firstOccurrence = firstGroup.startSession(firstMember, firstSession);
+
+        UserId secondAdmin = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        Group secondGroup = Group.create("Thursday dojo", secondAdmin, List.of(secondMember));
+        var secondSession =
+                secondGroup.createSession(secondMember, "Evening training", DayOfWeek.THURSDAY, LocalTime.of(18, 0));
+
+        assertTrue(secondGroup.activeOccurrences().isEmpty());
+
+        var secondOccurrence = secondGroup.startSession(secondMember, secondSession);
+
+        assertNotSame(firstOccurrence, secondOccurrence);
+        assertEquals(secondGroup.id(), secondOccurrence.groupId());
+        assertEquals(List.of(firstOccurrence), firstGroup.activeOccurrences());
+        assertEquals(List.of(secondOccurrence), secondGroup.activeOccurrences());
+    }
+
+    @Test
     @DisplayName("A group admin starts a scheduled session of their group")
     void groupAdminStartsScheduledSessionOfTheirGroup() {
         UserId admin = new UserId(UUID.randomUUID());
