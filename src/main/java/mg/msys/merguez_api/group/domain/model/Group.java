@@ -46,7 +46,7 @@ public final class Group {
     }
 
     public Session createSession(UserId requester, String name, DayOfWeek day, LocalTime startTime) {
-        if (requester == null || (!isAdmin(requester) && !isMember(requester))) {
+        if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can create sessions");
         }
         if (day == null) {
@@ -67,13 +67,17 @@ public final class Group {
     }
 
     public SessionOccurrence startSession(UserId requester, Session scheduledSession) {
-        if (requester == null || (!isAdmin(requester) && !isMember(requester))) {
+        if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can start sessions");
         }
         if (scheduledSession == null || !sessions.contains(scheduledSession)) {
             throw new IllegalArgumentException("Scheduled session must belong to this group");
         }
         return new SessionOccurrence(id, scheduledSession.id(), Instant.now());
+    }
+
+    private boolean isMemberOrAdmin(UserId requester) {
+        return requester != null && (isAdmin(requester) || isMember(requester));
     }
 
     private static void requireName(String name) {
