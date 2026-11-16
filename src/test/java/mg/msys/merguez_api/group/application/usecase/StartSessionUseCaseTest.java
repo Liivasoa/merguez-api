@@ -42,7 +42,7 @@ class StartSessionUseCaseTest {
         InMemoryGroupRepository groupRepository = new InMemoryGroupRepository(group);
         InMemorySessionOccurrenceRepository occurrenceRepository = new InMemorySessionOccurrenceRepository();
         StartSessionUseCase useCase = new StartSessionUseCase(groupRepository, occurrenceRepository);
-        StartSessionCommand command = new StartSessionCommand(group.id(), requester, scheduledSession);
+        StartSessionCommand command = new StartSessionCommand(group.id(), requester, scheduledSession.id());
 
         SessionOccurrence result = useCase.execute(command);
 
@@ -55,6 +55,34 @@ class StartSessionUseCaseTest {
                 () -> assertEquals(1, occurrenceRepository.savedOccurrences.size()),
                 () -> assertSame(result, occurrenceRepository.savedOccurrences.getFirst()),
                 () -> assertEquals(result.startedAt(), occurrenceRepository.savedOccurrences.getFirst().startedAt()),
+                () -> assertEquals(List.of(), groupRepository.savedGroups));
+    }
+
+    @Test
+    void resolvesScheduledSessionIdentifierFromLoadedGroup() {
+        UserId admin = userId();
+        UserId member = userId();
+        Group group = Group.restore(GroupId.random(), "Training group", null, admin, List.of(member));
+        Session firstSchedule = group.createSession(
+                admin, "First session", DayOfWeek.MONDAY, LocalTime.of(10, 0));
+        Session selectedSchedule = group.createSession(
+                admin, "Selected session", DayOfWeek.TUESDAY, LocalTime.of(11, 0));
+        InMemoryGroupRepository groupRepository = new InMemoryGroupRepository(group);
+        InMemorySessionOccurrenceRepository occurrenceRepository = new InMemorySessionOccurrenceRepository();
+        StartSessionUseCase useCase = new StartSessionUseCase(groupRepository, occurrenceRepository);
+
+        SessionOccurrence result = useCase.execute(
+                new StartSessionCommand(group.id(), member, selectedSchedule.id()));
+
+        assertAll(
+                () -> assertEquals(group.id(), result.groupId()),
+                () -> assertEquals(selectedSchedule.id(), result.scheduleId()),
+                () -> assertTrue(result.isStarted()),
+                () -> assertEquals(List.of(firstSchedule, selectedSchedule), group.sessions()),
+                () -> assertEquals(1, group.activeOccurrences().size()),
+                () -> assertSame(result, group.activeOccurrences().getFirst()),
+                () -> assertEquals(1, occurrenceRepository.savedOccurrences.size()),
+                () -> assertSame(result, occurrenceRepository.savedOccurrences.getFirst()),
                 () -> assertEquals(List.of(), groupRepository.savedGroups));
     }
 
@@ -72,7 +100,7 @@ class StartSessionUseCaseTest {
         StartSessionUseCase initialUseCase = new StartSessionUseCase(
                 new InMemoryGroupRepository(originalGroup), occurrenceRepository);
         SessionOccurrence firstOccurrence = initialUseCase.execute(
-                new StartSessionCommand(firstGroupId, firstMember, firstSchedule));
+                new StartSessionCommand(firstGroupId, firstMember, firstSchedule.id()));
 
         Group freshGroup = Group.restore(firstGroupId, "First group", null, firstAdmin, List.of(firstMember));
         Session anotherSchedule = freshGroup.createSession(
@@ -97,12 +125,12 @@ class StartSessionUseCaseTest {
 
         assertAll(
                 () -> assertThrows(RuntimeException.class, () -> useCase.execute(
-                        new StartSessionCommand(firstGroupId, firstMember, anotherSchedule))),
+                        new StartSessionCommand(firstGroupId, firstMember, anotherSchedule.id()))),
                 () -> assertEquals(List.of(firstOccurrence), occurrenceRepository.occurrencesFor(firstGroupId)),
                 () -> assertEquals(1, occurrenceRepository.savedOccurrences.size()),
                 () -> {
                     SessionOccurrence result = useCase.execute(
-                            new StartSessionCommand(secondGroup.id(), secondAdmin, secondSchedule));
+                            new StartSessionCommand(secondGroup.id(), secondAdmin, secondSchedule.id()));
                     assertAll(
                             () -> assertEquals(secondGroup.id(), result.groupId()),
                             () -> assertEquals(secondSchedule.id(), result.scheduleId()),
