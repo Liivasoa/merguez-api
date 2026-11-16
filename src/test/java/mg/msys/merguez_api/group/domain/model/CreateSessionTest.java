@@ -39,6 +39,32 @@ class CreateSessionTest {
     }
 
     @Test
+    @DisplayName("Starting a scheduled session creates a timestamped occurrence without changing the schedule")
+    void startingSessionCreatesTimestampedOccurrenceWithoutChangingSchedule() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(member));
+        var session = group.createSession(member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        var scheduledGroupId = session.groupId();
+        var scheduledName = session.name();
+        var scheduledDay = session.day();
+        var scheduledTime = session.startTime();
+        var scheduledId = session.id();
+
+        var occurrence = group.startSession(member, session);
+
+        assertNotSame(session, occurrence);
+        assertEquals(scheduledId, occurrence.scheduleId());
+        assertNotNull(occurrence.startedAt());
+        assertEquals(scheduledGroupId, session.groupId());
+        assertEquals(scheduledName, session.name());
+        assertEquals(scheduledDay, session.day());
+        assertEquals(scheduledTime, session.startTime());
+        assertEquals(scheduledId, session.id());
+        assertTrue(group.sessions().contains(session));
+    }
+
+    @Test
     @DisplayName("A group admin starts a scheduled session of their group")
     void groupAdminStartsScheduledSessionOfTheirGroup() {
         UserId admin = new UserId(UUID.randomUUID());
