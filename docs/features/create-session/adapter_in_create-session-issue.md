@@ -30,5 +30,16 @@ Given une séance a été créée pour un groupe
 When l’adaptateur entrant traite une requête visant à consulter les séances de ce groupe
 Then la réponse inclut la séance créée
 
+4. Signaler un groupe inexistant
+Scenario: une requête de création de séance pour un groupe inexistant
+Given un groupe inexistant
+When l’adaptateur entrant traite une requête de création de séance pour ce groupe
+Then la réponse a le code HTTP 404
+
+Scenario: une requête de consultation des séances d’un groupe inexistant
+Given un groupe inexistant
+When l’adaptateur entrant traite une requête de consultation des séances de ce groupe
+Then la réponse a le code HTTP 404
+
 **Notes**
-- Les routes exactes, les champs de réponse et les codes d’état HTTP ne sont pas spécifiés.
+- Les routes exactes, les champs de réponse et les autres codes d’état HTTP ne sont pas spécifiés.
