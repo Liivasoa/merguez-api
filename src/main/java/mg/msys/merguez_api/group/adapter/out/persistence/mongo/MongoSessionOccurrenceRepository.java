@@ -17,7 +17,8 @@ class MongoSessionOccurrenceRepository implements SessionOccurrenceRepository {
 
     @Override
     public boolean existsStartedByGroupId(GroupId groupId) {
-        return repository.existsByGroupIdAndStatus(groupId.value().toString(), "IN_PROGRESS");
+        return repository.existsByGroupIdAndStatus(
+                groupId.value().toString(), SessionOccurrenceDocument.IN_PROGRESS_STATUS);
     }
 
     @Override

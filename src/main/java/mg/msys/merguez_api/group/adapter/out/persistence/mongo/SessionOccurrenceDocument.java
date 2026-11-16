@@ -16,7 +16,7 @@ import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
             name = "active_occurrence_per_group",
             def = "{ 'groupId': 1 }",
             unique = true,
-            partialFilter = "{ 'status': 'IN_PROGRESS' }"),
+            partialFilter = "{ 'status': '" + SessionOccurrenceDocument.IN_PROGRESS_STATUS + "' }"),
     @CompoundIndex(
             name = "group_occurrence_history",
             def = "{ 'groupId': 1, 'startedAt': -1 }")
@@ -24,12 +24,14 @@ import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 record SessionOccurrenceDocument(
         @Id String id, String groupId, String scheduleId, String status, Date startedAt) {
 
+    static final String IN_PROGRESS_STATUS = "IN_PROGRESS";
+
     static SessionOccurrenceDocument from(SessionOccurrence occurrence) {
         return new SessionOccurrenceDocument(
                 UUID.randomUUID().toString(),
                 occurrence.groupId().value().toString(),
                 occurrence.scheduleId().toString(),
-                "IN_PROGRESS",
+                IN_PROGRESS_STATUS,
                 Date.from(occurrence.startedAt()));
     }
 }
