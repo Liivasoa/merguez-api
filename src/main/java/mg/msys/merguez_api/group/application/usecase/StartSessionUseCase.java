@@ -24,6 +24,9 @@ public final class StartSessionUseCase {
     public SessionOccurrence execute(StartSessionCommand command) {
         Group group = groupRepository.findById(command.groupId())
                 .orElseThrow(() -> new GroupNotFoundException(command.groupId()));
+        if (occurrenceRepository.existsStartedByGroupId(group.id())) {
+            throw new IllegalStateException("A session is already started in this group");
+        }
         SessionOccurrence occurrence = group.startSession(command.requester(), command.scheduledSession());
         occurrenceRepository.save(occurrence);
         return occurrence;
