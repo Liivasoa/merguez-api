@@ -102,9 +102,9 @@ class StartSessionUseCaseTest {
         SessionOccurrence firstOccurrence = initialUseCase.execute(
                 new StartSessionCommand(firstGroupId, firstMember, firstSchedule.id()));
 
-        Group freshGroup = Group.restore(firstGroupId, "First group", null, firstAdmin, List.of(firstMember));
-        Session anotherSchedule = freshGroup.createSession(
-                firstAdmin, "Another session", DayOfWeek.TUESDAY, LocalTime.of(10, 0));
+        Group freshGroup = Group.restore(
+                firstGroupId, "First group", null, firstAdmin, List.of(firstMember), List.of(originalAnotherSchedule));
+        Session anotherSchedule = freshGroup.sessions().getFirst();
         UserId secondAdmin = userId();
         Group secondGroup = Group.restore(GroupId.random(), "Second group", null, secondAdmin, List.of(userId()));
         Session secondSchedule = secondGroup.createSession(

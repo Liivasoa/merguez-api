@@ -2,6 +2,7 @@ package mg.msys.merguez_api.group.application.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.DayOfWeek;
@@ -90,16 +91,19 @@ class CreateSessionUseCaseTest {
         CreateSessionCommand command =
                 new CreateSessionCommand(groupId, requester, name, DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
-        Group expectedGroup = Group.restore(groupId, "Dojo du mardi", null, admin, List.of(member));
-        Session expectedSession =
-                expectedGroup.createSession(requester, name, DayOfWeek.TUESDAY, LocalTime.of(14, 0));
-
         Session result = useCase.execute(command);
 
-        assertEquals(expectedSession, result);
-        assertEquals(1, repository.savedSessionLists.size());
-        assertEquals(List.of(result), repository.savedSessionLists.getFirst());
-        assertEquals(List.of(result), group.sessions());
+        assertAll(
+                () -> assertEquals(groupId, result.groupId()),
+                () -> assertNotNull(result.id()),
+                () -> assertEquals(
+                        name == null || name.isEmpty() ? "TUESDAY 14:00" : name,
+                        result.name()),
+                () -> assertEquals(DayOfWeek.TUESDAY, result.day()),
+                () -> assertEquals(LocalTime.of(14, 0), result.startTime()),
+                () -> assertEquals(1, repository.savedSessionLists.size()),
+                () -> assertEquals(List.of(result), repository.savedSessionLists.getFirst()),
+                () -> assertEquals(List.of(result), group.sessions()));
     }
 
     @ParameterizedTest

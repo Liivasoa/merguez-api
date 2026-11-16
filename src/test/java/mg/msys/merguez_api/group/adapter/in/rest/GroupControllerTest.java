@@ -199,7 +199,7 @@ class GroupControllerTest {
         DayOfWeek day = DayOfWeek.TUESDAY;
         LocalTime startTime = LocalTime.of(14, 30);
         when(createSessionUseCase.execute(any(CreateSessionCommand.class)))
-                .thenReturn(new Session(groupId, "Created session", day, startTime));
+                .thenReturn(new Session(groupId, UUID.randomUUID(), "Created session", day, startTime));
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -287,7 +287,7 @@ class GroupControllerTest {
         GroupId groupId = GroupId.random();
         UserId requester = new UserId(UUID.randomUUID());
         LocalTime startTime = LocalTime.of(14, 30);
-        Session session = new Session(groupId, "Evening training", DayOfWeek.TUESDAY, startTime);
+        Session session = new Session(groupId, UUID.randomUUID(), "Evening training", DayOfWeek.TUESDAY, startTime);
         when(createSessionUseCase.execute(any(CreateSessionCommand.class))).thenReturn(session);
         when(getGroupSessionsUseCase.execute(groupId)).thenReturn(List.of(session));
         String requestBody = """

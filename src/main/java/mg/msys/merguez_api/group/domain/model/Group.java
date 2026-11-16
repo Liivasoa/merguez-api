@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
@@ -43,13 +44,38 @@ public final class Group {
 
     // For persistence adapters: rebuilds an existing group and bypasses creation validation
     public static Group restore(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
-        return new Group(id, name, description, creator, participants);
+        return restore(id, name, description, creator, participants, List.of());
+    }
+
+    public static Group restore(
+            GroupId id,
+            String name,
+            String description,
+            UserId creator,
+            List<UserId> participants,
+            List<Session> sessions) {
+        Group group = new Group(id, name, description, creator, participants);
+        for (Session session : sessions) {
+            if (!id.equals(session.groupId())) {
+                throw new IllegalArgumentException("Scheduled session must belong to this group");
+            }
+            group.validateSessionSchedule(session.day(), session.startTime());
+            group.sessions.add(session);
+        }
+        return group;
     }
 
     public Session createSession(UserId requester, String name, DayOfWeek day, LocalTime startTime) {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can create sessions");
         }
+        validateSessionSchedule(day, startTime);
+        Session session = new Session(id, UUID.randomUUID(), sessionNameOrDefault(name, day, startTime), day, startTime);
+        sessions.add(session);
+        return session;
+    }
+
+    private void validateSessionSchedule(DayOfWeek day, LocalTime startTime) {
         if (day == null) {
             throw new IllegalArgumentException("Session day is required");
         }
@@ -59,12 +85,13 @@ public final class Group {
         if (sessions.stream().anyMatch(session -> session.day().equals(day) && session.startTime().equals(startTime))) {
             throw new IllegalStateException("A session already exists at this day and start time");
         }
+    }
+
+    private static String sessionNameOrDefault(String name, DayOfWeek day, LocalTime startTime) {
         if (name == null || name.isEmpty()) {
-            name = day + " " + startTime;
+            return day + " " + startTime;
         }
-        Session session = new Session(id, name, day, startTime);
-        sessions.add(session);
-        return session;
+        return name;
     }
 
     public SessionOccurrence startSession(UserId requester, Session scheduledSession) {

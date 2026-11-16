@@ -42,14 +42,13 @@ class MongoGroupRepositoryUnitTest {
         UserId creator = new UserId(UUID.randomUUID());
         UserId participant = new UserId(UUID.randomUUID());
         Group group = Group.create("Tuesday dojo", creator, List.of(participant));
-        group.createSession(creator, "Evening practice", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        Session session = group.createSession(creator, "Evening practice", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
         repository.save(group);
         Group loaded = repository.findById(group.id()).orElseThrow();
 
         assertAll(
                 () -> assertEquals(group.id(), loaded.id()),
-                () -> assertTrue(loaded.sessions().contains(
-                        new Session(group.id(), "Evening practice", DayOfWeek.TUESDAY, LocalTime.of(14, 0)))));
+                () -> assertTrue(loaded.sessions().contains(session)));
     }
 }

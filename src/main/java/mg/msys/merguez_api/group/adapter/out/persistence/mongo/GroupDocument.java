@@ -34,12 +34,11 @@ record GroupDocument(
         List<GroupMember> groupMembers = members.stream().map(MemberDocument::toGroupMember).toList();
         UserId creator = userIdsWithRole(groupMembers, Role.ADMIN).findFirst().orElseThrow();
         List<UserId> participants = userIdsWithRole(groupMembers, Role.MEMBER).toList();
-        Group group = Group.restore(new GroupId(UUID.fromString(id)), name, description, creator, participants);
+        GroupId groupId = new GroupId(UUID.fromString(id));
         List<SessionDocument> persistedSessions = sessions == null ? List.of() : sessions;
-        for (SessionDocument session : persistedSessions) {
-            group.createSession(creator, session.name(), session.day(), session.startTime());
-        }
-        return group;
+        List<Session> restoredSessions =
+                persistedSessions.stream().map(session -> session.toSession(groupId)).toList();
+        return Group.restore(groupId, name, description, creator, participants, restoredSessions);
     }
 
     private static Stream<UserId> userIdsWithRole(List<GroupMember> groupMembers, Role role) {
@@ -59,10 +58,14 @@ record GroupDocument(
         }
     }
 
-    record SessionDocument(String name, DayOfWeek day, LocalTime startTime) {
+    record SessionDocument(String id, String name, DayOfWeek day, LocalTime startTime) {
 
         static SessionDocument from(Session session) {
-            return new SessionDocument(session.name(), session.day(), session.startTime());
+            return new SessionDocument(session.id().toString(), session.name(), session.day(), session.startTime());
+        }
+
+        Session toSession(GroupId groupId) {
+            return new Session(groupId, UUID.fromString(id), name, day, startTime);
         }
     }
 }
