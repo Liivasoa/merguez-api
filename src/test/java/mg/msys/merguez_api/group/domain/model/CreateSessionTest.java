@@ -65,6 +65,22 @@ class CreateSessionTest {
     }
 
     @Test
+    @DisplayName("A group rejects a second started session and keeps the first as its only active occurrence")
+    void groupRejectsSecondStartedSessionAndKeepsFirstAsOnlyActiveOccurrence() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(member));
+        var firstSession = group.createSession(member, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(9, 0));
+        var secondSession =
+                group.createSession(member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(18, 0));
+        var firstOccurrence = group.startSession(member, firstSession);
+
+        assertThrows(IllegalStateException.class, () -> group.startSession(member, secondSession));
+
+        assertEquals(List.of(firstOccurrence), group.activeOccurrences());
+    }
+
+    @Test
     @DisplayName("A group admin starts a scheduled session of their group")
     void groupAdminStartsScheduledSessionOfTheirGroup() {
         UserId admin = new UserId(UUID.randomUUID());
