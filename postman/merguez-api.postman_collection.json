@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7b1f2c4e-3a5d-4e8b-9c1a-5e2d0a0f0001",
     "name": "Merguez API",
-    "description": "Requests for the Merguez API. Import this file into Postman, then adjust the baseUrl collection variable if needed.",
+    "description": "Requests for the Merguez API. Import this file into Postman, then adjust the baseUrl collection variable if needed. Run Create group first to populate groupId for the session requests; create a new group before rerunning successful session creation requests with the same schedule.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -19,6 +19,11 @@
     {
       "key": "participantId",
       "value": "22222222-2222-2222-2222-222222222222",
+      "type": "string"
+    },
+    {
+      "key": "groupId",
+      "value": "",
       "type": "string"
     }
   ],
@@ -40,7 +45,17 @@
                   "",
                   "pm.test('Location header is set', function () {",
                   "    pm.response.to.have.header('Location');",
-                  "});"
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const group = pm.response.json();",
+                  "    pm.test('Group ID is present', function () {",
+                  "        pm.expect(group.id).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "    if (typeof group.id === 'string' && group.id.length > 0) {",
+                  "        pm.collectionVariables.set('groupId', group.id);",
+                  "    }",
+                  "}"
                 ]
               }
             }
@@ -240,5 +255,183 @@
         }
       ]
     }
+,
+    {
+          "name": "Sessions",
+          "item": [
+            {
+              "name": "Create session",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 204 No Content', function () {",
+                      "    pm.response.to.have.status(204);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{participantId}}\",\n  \"name\": \"Evening training\",\n  \"day\": \"TUESDAY\",\n  \"startTime\": \"14:00\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions"]
+                }
+              }
+            },
+            {
+              "name": "Create session - generated name",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 204 No Content', function () {",
+                      "    pm.response.to.have.status(204);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{creatorId}}\",\n  \"day\": \"WEDNESDAY\",\n  \"startTime\": \"14:00\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions"]
+                }
+              }
+            },
+            {
+              "name": "List group sessions",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 200 OK', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Sessions belong to the requested group', function () {",
+                      "    const sessions = pm.response.json();",
+                      "    pm.expect(sessions).to.be.an('array');",
+                      "    sessions.forEach(function (session) {",
+                      "        pm.expect(session.groupId).to.equal(pm.variables.get('groupId'));",
+                      "        pm.expect(session.name).to.be.a('string').and.not.empty;",
+                      "        pm.expect(session.day).to.be.a('string');",
+                      "        pm.expect(session.startTime).to.be.a('string');",
+                      "    });",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions"]
+                }
+              }
+            },
+            {
+              "name": "Create session - missing day (400)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 400 Bad Request', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{participantId}}\",\n  \"startTime\": \"14:00\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions"]
+                }
+              }
+            },
+            {
+              "name": "Create session - missing start time (400)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 400 Bad Request', function () {",
+                      "    pm.response.to.have.status(400);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{participantId}}\",\n  \"day\": \"TUESDAY\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions"]
+                }
+              }
+            }
+          ]
+        }
   ]
 }

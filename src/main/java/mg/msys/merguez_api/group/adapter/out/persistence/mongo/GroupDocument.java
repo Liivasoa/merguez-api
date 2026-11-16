@@ -1,5 +1,7 @@
 package mg.msys.merguez_api.group.adapter.out.persistence.mongo;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -11,23 +13,33 @@ import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.GroupMember;
 import mg.msys.merguez_api.group.domain.model.Role;
+import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 @Document("groups")
-record GroupDocument(@Id String id, String name, String description, List<MemberDocument> members) {
+record GroupDocument(
+        @Id String id, String name, String description, List<MemberDocument> members, List<SessionDocument> sessions) {
 
     static GroupDocument from(Group group) {
         List<MemberDocument> members = group.members().stream()
                 .map(MemberDocument::from)
                 .toList();
-        return new GroupDocument(group.id().value().toString(), group.name(), group.description().orElse(null), members);
+        List<SessionDocument> sessions = group.sessions().stream()
+                .map(SessionDocument::from)
+                .toList();
+        return new GroupDocument(group.id().value().toString(), group.name(), group.description().orElse(null), members, sessions);
     }
 
     Group toGroup() {
         List<GroupMember> groupMembers = members.stream().map(MemberDocument::toGroupMember).toList();
         UserId creator = userIdsWithRole(groupMembers, Role.ADMIN).findFirst().orElseThrow();
         List<UserId> participants = userIdsWithRole(groupMembers, Role.MEMBER).toList();
-        return Group.restore(new GroupId(UUID.fromString(id)), name, description, creator, participants);
+        Group group = Group.restore(new GroupId(UUID.fromString(id)), name, description, creator, participants);
+        List<SessionDocument> persistedSessions = sessions == null ? List.of() : sessions;
+        for (SessionDocument session : persistedSessions) {
+            group.createSession(creator, session.name(), session.day(), session.startTime());
+        }
+        return group;
     }
 
     private static Stream<UserId> userIdsWithRole(List<GroupMember> groupMembers, Role role) {
@@ -44,6 +56,13 @@ record GroupDocument(@Id String id, String name, String description, List<Member
 
         GroupMember toGroupMember() {
             return new GroupMember(new UserId(UUID.fromString(userId)), Role.valueOf(role));
+        }
+    }
+
+    record SessionDocument(String name, DayOfWeek day, LocalTime startTime) {
+
+        static SessionDocument from(Session session) {
+            return new SessionDocument(session.name(), session.day(), session.startTime());
         }
     }
 }
