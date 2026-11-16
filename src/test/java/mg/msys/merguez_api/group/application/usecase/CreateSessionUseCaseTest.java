@@ -1,5 +1,6 @@
 package mg.msys.merguez_api.group.application.usecase;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -15,15 +16,50 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class CreateSessionUseCaseTest {
+
+    @ParameterizedTest
+    @ValueSource(strings = {"outsider", "otherGroupMember", "null"})
+    void rejectsNonMembersWithoutMutatingOrSavingGroup(String requesterKind) {
+        UserId admin = userId();
+        UserId member = userId();
+        UserId otherGroupMember = userId();
+        Group otherGroup = Group.restore(GroupId.random(), "Other group", null, userId(), List.of(otherGroupMember));
+        UserId requester = switch (requesterKind) {
+            case "otherGroupMember" -> otherGroupMember;
+            case "null" -> null;
+            default -> userId();
+        };
+        GroupId groupId = GroupId.random();
+        Group directGroup = Group.restore(groupId, "Dojo du mardi", null, admin, List.of(member));
+        Group storedGroup = Group.restore(groupId, "Dojo du mardi", null, admin, List.of(member));
+        Session directExisting = directGroup.createSession(
+                admin, "Existing session", DayOfWeek.MONDAY, LocalTime.of(10, 0));
+        Session storedExisting = storedGroup.createSession(
+                admin, "Existing session", DayOfWeek.MONDAY, LocalTime.of(10, 0));
+        InMemoryGroupRepository repository = new InMemoryGroupRepository(storedGroup, otherGroup);
+        CreateSessionUseCase useCase = new CreateSessionUseCase(repository);
+        CreateSessionCommand command =
+                new CreateSessionCommand(groupId, requester, "New session", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        assertAll(
+                () -> assertThrows(GroupAccessDeniedException.class,
+                        () -> directGroup.createSession(requester, "New session", DayOfWeek.TUESDAY, LocalTime.of(14, 0))),
+                () -> assertEquals(List.of(directExisting), directGroup.sessions()),
+                () -> assertThrows(GroupAccessDeniedException.class, () -> useCase.execute(command)),
+                () -> assertEquals(List.of(storedExisting), storedGroup.sessions()),
+                () -> assertEquals(0, repository.savedGroupIds.size()));
+    }
 
     @ParameterizedTest
     @MethodSource("validCreationRequests")
