@@ -108,6 +108,52 @@ class GroupControllerTest {
     }
 
     @Test
+    @DisplayName("POST a session start exposes an active-group refusal while another group can start")
+    void startSessionRefusedForActiveGroupDoesNotPreventStartInAnotherGroup() {
+        GroupId activeGroupId = GroupId.random();
+        GroupId otherGroupId = GroupId.random();
+        UUID refusedScheduleId = UUID.randomUUID();
+        UUID allowedScheduleId = UUID.randomUUID();
+        UserId activeGroupRequester = new UserId(UUID.randomUUID());
+        UserId otherGroupRequester = new UserId(UUID.randomUUID());
+        Instant startedAt = Instant.parse("2026-11-16T21:13:53Z");
+        String sensitiveDetail = "private internal active session details";
+        StartSessionCommand refusedCommand =
+                new StartSessionCommand(activeGroupId, activeGroupRequester, refusedScheduleId);
+        StartSessionCommand allowedCommand =
+                new StartSessionCommand(otherGroupId, otherGroupRequester, allowedScheduleId);
+        when(startSessionUseCase.execute(refusedCommand)).thenThrow(new IllegalStateException(sensitiveDetail));
+        when(startSessionUseCase.execute(allowedCommand))
+                .thenReturn(new SessionOccurrence(otherGroupId, allowedScheduleId, startedAt));
+
+        assertAll(
+                () -> mockMvc.perform(post(
+                                "/api/v1/groups/{groupId}/sessions/{sessionId}/start",
+                                activeGroupId.value(),
+                                refusedScheduleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requesterId\":\"%s\"}".formatted(activeGroupRequester.value())))
+                        .andExpect(status().isConflict())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.status").value(409))
+                        .andExpect(jsonPath("$.detail").value("A session is already started in this group."))
+                        .andExpect(content().string(not(containsString(sensitiveDetail)))),
+                () -> mockMvc.perform(post(
+                                "/api/v1/groups/{groupId}/sessions/{sessionId}/start",
+                                otherGroupId.value(),
+                                allowedScheduleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requesterId\":\"%s\"}".formatted(otherGroupRequester.value())))
+                        .andExpect(status().isOk())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                        .andExpect(jsonPath("$.groupId").value(otherGroupId.value().toString()))
+                        .andExpect(jsonPath("$.scheduleId").value(allowedScheduleId.toString()))
+                        .andExpect(jsonPath("$.startedAt").value(startedAt.toString())),
+                () -> verify(startSessionUseCase).execute(refusedCommand),
+                () -> verify(startSessionUseCase).execute(allowedCommand));
+    }
+
+    @Test
     @DisplayName("POST and GET sessions for a missing group return 404 ProblemDetail without saving")
     void sessionOperationsForMissingGroupReturnNotFoundWithoutSaving() {
         GroupId groupId = GroupId.random();
