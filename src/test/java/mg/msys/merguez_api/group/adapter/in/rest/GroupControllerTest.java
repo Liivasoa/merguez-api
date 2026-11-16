@@ -4,8 +4,12 @@ import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -19,6 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -35,9 +40,11 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
+import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
@@ -62,6 +69,42 @@ class GroupControllerTest {
 
     @MockitoBean
     private GetGroupSessionsUseCase getGroupSessionsUseCase;
+
+    @Test
+    @DisplayName("POST and GET sessions for a missing group return 404 ProblemDetail without saving")
+    void sessionOperationsForMissingGroupReturnNotFoundWithoutSaving() {
+        GroupId groupId = GroupId.random();
+        GroupRepository repository = mock(GroupRepository.class);
+        when(repository.findById(groupId)).thenReturn(Optional.empty());
+        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupController(
+                createGroupUseCase,
+                new CreateSessionUseCase(repository),
+                new GetGroupSessionsUseCase(repository)))
+                .setControllerAdvice(new GroupExceptionHandler())
+                .build();
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "name": "Evening training",
+                  "day": "TUESDAY",
+                  "startTime": "14:30"
+                }
+                """.formatted(UUID.randomUUID());
+
+        assertAll(
+                () -> standaloneMvc.perform(post("/api/v1/groups/{groupId}/sessions", groupId.value())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                        .andExpect(status().isNotFound())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.status").value(404)),
+                () -> standaloneMvc.perform(get("/api/v1/groups/{groupId}/sessions", groupId.value()))
+                        .andExpect(status().isNotFound())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.status").value(404)),
+                () -> verify(repository, times(2)).findById(groupId),
+                () -> verify(repository, never()).save(any()));
+    }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("sessionNames")
