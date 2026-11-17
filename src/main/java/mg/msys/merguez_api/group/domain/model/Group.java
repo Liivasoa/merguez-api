@@ -109,6 +109,24 @@ public final class Group {
         return occurrence;
     }
 
+    public Round addRound(UserId requester, SessionOccurrence occurrence, List<Combat> combats) {
+        if (!isMemberOrAdmin(requester)) {
+            throw new GroupAccessDeniedException("Only group members can add rounds");
+        }
+        if (occurrence == null || !activeOccurrences.contains(occurrence)) {
+            throw new IllegalStateException("Session occurrence must be in progress");
+        }
+        if (combats == null || combats.isEmpty()) {
+            throw new IllegalArgumentException("A round must contain at least one combat");
+        }
+        for (Combat combat : combats) {
+            if (!combat.participants().stream().allMatch(this::isMemberOrAdmin)) {
+                throw new IllegalArgumentException("Combat participants must belong to this group");
+            }
+        }
+        return new Round(occurrence, combats);
+    }
+
     public List<SessionOccurrence> activeOccurrences() {
         return List.copyOf(activeOccurrences);
     }
