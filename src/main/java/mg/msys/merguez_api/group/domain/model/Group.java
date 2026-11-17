@@ -4,7 +4,9 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +25,7 @@ public final class Group {
     private final List<UserId> participants;
     private final List<Session> sessions = new ArrayList<>();
     private final List<SessionOccurrence> activeOccurrences = new ArrayList<>();
+    private final Map<SessionOccurrence, List<Round>> roundsByOccurrence = new HashMap<>();
 
     private Group(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
         this.id = id;
@@ -106,6 +109,7 @@ public final class Group {
         }
         SessionOccurrence occurrence = new SessionOccurrence(id, scheduledSession.id(), Instant.now());
         activeOccurrences.add(occurrence);
+        roundsByOccurrence.put(occurrence, new ArrayList<>());
         return occurrence;
     }
 
@@ -124,7 +128,10 @@ public final class Group {
                 throw new IllegalArgumentException("Combat participants must belong to this group");
             }
         }
-        return new Round(occurrence, combats);
+        List<Round> rounds = roundsByOccurrence.get(occurrence);
+        Round round = new Round(occurrence, rounds.size() + 1, combats);
+        rounds.add(round);
+        return round;
     }
 
     public List<SessionOccurrence> activeOccurrences() {
