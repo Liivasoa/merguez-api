@@ -112,41 +112,20 @@ public class GroupController {
     }
 
     @PostMapping("/{groupId}/rounds")
-    public ResponseEntity<?> createRound(
+    public ResponseEntity<RoundResponse> createRound(
             @PathVariable UUID groupId,
             @Valid @RequestBody CreateRoundRequest request) {
-        try {
-            var round = addRoundUseCase.execute(request.toCommand(new GroupId(groupId)));
-            return ResponseEntity.status(HttpStatus.CREATED).body(RoundResponse.from(round));
-        } catch (IllegalArgumentException ex) {
-            log.debug("Round creation refused", ex);
-            return refusedRoundRequest(HttpStatus.BAD_REQUEST);
-        } catch (IllegalStateException ex) {
-            log.debug("Round creation refused", ex);
-            return refusedRoundRequest(HttpStatus.CONFLICT);
-        }
+        var round = addRoundUseCase.execute(request.toCommand(new GroupId(groupId)));
+        return ResponseEntity.status(HttpStatus.CREATED).body(RoundResponse.from(round));
     }
 
     @PostMapping("/{groupId}/rounds/{roundNumber}/combats")
-    public ResponseEntity<?> addCombat(
+    public ResponseEntity<RoundResponse> addCombat(
             @PathVariable UUID groupId,
             @PathVariable int roundNumber,
             @Valid @RequestBody AddCombatRequest request) {
-        try {
-            var round = addCombatUseCase.execute(request.toCommand(new GroupId(groupId), roundNumber));
-            return ResponseEntity.ok(RoundResponse.from(round));
-        } catch (IllegalArgumentException ex) {
-            log.debug("Combat addition refused", ex);
-            return refusedRoundRequest(HttpStatus.BAD_REQUEST);
-        } catch (IllegalStateException ex) {
-            log.debug("Combat addition refused", ex);
-            return refusedRoundRequest(HttpStatus.CONFLICT);
-        }
-    }
-
-    private ResponseEntity<ProblemDetail> refusedRoundRequest(HttpStatus status) {
-        return ResponseEntity.status(status)
-                .body(ProblemDetail.forStatusAndDetail(status, "The round request was refused."));
+        var round = addCombatUseCase.execute(request.toCommand(new GroupId(groupId), roundNumber));
+        return ResponseEntity.ok(RoundResponse.from(round));
     }
 
     @PostMapping("/{groupId}/sessions/{sessionId}/start")

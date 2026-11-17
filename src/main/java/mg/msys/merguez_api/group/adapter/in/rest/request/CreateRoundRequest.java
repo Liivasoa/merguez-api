@@ -4,7 +4,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -27,6 +29,12 @@ public record CreateRoundRequest(
     public record CombatRequest(
             @NotNull @Size(min = 2, max = 2) List<@NotNull UUID> participantIds,
             UUID winnerId) {
+
+        @JsonIgnore
+        @AssertTrue
+        boolean isParticipantsDistinct() {
+            return participantIds == null || participantIds.stream().distinct().count() == participantIds.size();
+        }
 
         private Combat toCombat() {
             return new Combat(
