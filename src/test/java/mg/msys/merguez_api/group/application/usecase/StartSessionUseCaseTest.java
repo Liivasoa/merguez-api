@@ -27,6 +27,7 @@ import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
+import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
@@ -236,6 +237,27 @@ class StartSessionUseCaseTest {
                 () -> assertEquals("A round must contain at least one combat", exception.getCause().getMessage()),
                 () -> assertEquals(0, roundRepository.savedRounds.size()),
                 () -> assertEquals(List.of(), reloadedGroup.rounds(reloadedGroup.activeOccurrences().getFirst())));
+    }
+
+    @Test
+    void propagatesGroupAccessDenialWithoutSavingRound() {
+        UserId admin = userId();
+        UserId member = userId();
+        Group group = Group.restore(GroupId.random(), "Training group", null, admin, List.of(member));
+        Session session = group.createSession(admin, "Training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
+        AddRoundUseCase useCase = new AddRoundUseCase(id -> Optional.of(group), roundRepository);
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+
+        GroupAccessDeniedException exception = assertThrowsExactly(
+                GroupAccessDeniedException.class,
+                () -> useCase.execute(new AddRoundCommand(group.id(), userId(), List.of(combat))));
+
+        assertAll(
+                () -> assertEquals("Only group members can add rounds", exception.getMessage()),
+                () -> assertEquals(0, roundRepository.savedRounds.size()),
+                () -> assertEquals(List.of(), group.rounds(occurrence)));
     }
 
     @Test
