@@ -19,11 +19,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import mg.msys.merguez_api.group.application.command.AddRoundCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
+import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
+import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
@@ -143,6 +147,52 @@ class StartSessionUseCaseTest {
                 () -> assertEquals(List.of(), groupRepository.savedGroups));
     }
 
+    @Test
+    void createsAndPersistsInitialRoundFromReloadedActiveOccurrence() {
+        UserId admin = userId();
+        UserId firstMember = userId();
+        UserId secondMember = userId();
+        GroupId groupId = GroupId.random();
+        Group initialGroup = Group.restore(groupId, "Training group", null, admin, List.of(firstMember, secondMember));
+        Session session = initialGroup.createSession(
+                admin, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        SessionOccurrence persistedOccurrence = initialGroup.startSession(admin, session);
+        InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
+        ReloadingGroupRepository groupRepository = new ReloadingGroupRepository(
+                groupId,
+                "Training group",
+                admin,
+                List.of(firstMember, secondMember),
+                List.of(session),
+                persistedOccurrence,
+                roundRepository);
+        Group loadedGroup = groupRepository.findById(groupId).orElseThrow();
+        assertNotSame(initialGroup, loadedGroup);
+        assertEquals(List.of(persistedOccurrence), loadedGroup.activeOccurrences());
+        assertEquals(List.of(), loadedGroup.rounds(persistedOccurrence));
+
+        UserId requester = firstMember;
+        UserId winner = secondMember;
+        Combat combat = new Combat(List.of(firstMember, secondMember), Optional.of(winner));
+        AddRoundUseCase useCase = new AddRoundUseCase(groupRepository, roundRepository);
+
+        Round result = useCase.execute(new AddRoundCommand(groupId, requester, List.of(combat)));
+
+        Group reloadedGroup = groupRepository.findById(groupId).orElseThrow();
+        Round persistedRound = roundRepository.savedRounds.getFirst();
+        assertAll(
+                () -> assertEquals(persistedOccurrence, result.occurrence()),
+                () -> assertEquals(1, result.number()),
+                () -> assertEquals(List.of(combat), result.combats()),
+                () -> assertEquals(Optional.of(winner), result.combats().getFirst().winner()),
+                () -> assertEquals(1, roundRepository.savedRounds.size()),
+                () -> assertSame(result, persistedRound),
+                () -> assertEquals(persistedOccurrence, persistedRound.occurrence()),
+                () -> assertEquals(Optional.of(winner), persistedRound.combats().getFirst().winner()),
+                () -> assertNotSame(loadedGroup, reloadedGroup),
+                () -> assertEquals(List.of(result), reloadedGroup.rounds(persistedOccurrence)));
+    }
+
     private static UserId userId() {
         return new UserId(UUID.randomUUID());
     }
@@ -183,6 +233,73 @@ class StartSessionUseCaseTest {
 
         private List<SessionOccurrence> occurrencesFor(GroupId groupId) {
             return savedOccurrences.stream().filter(occurrence -> occurrence.groupId().equals(groupId)).toList();
+        }
+    }
+
+    private static class ReloadingGroupRepository implements GroupRepository {
+
+        private final GroupId groupId;
+        private final String name;
+        private final UserId admin;
+        private final List<UserId> participants;
+        private final List<Session> sessions;
+        private final SessionOccurrence activeOccurrence;
+        private final RoundRepository roundRepository;
+
+        private ReloadingGroupRepository(
+                GroupId groupId,
+                String name,
+                UserId admin,
+                List<UserId> participants,
+                List<Session> sessions,
+                SessionOccurrence activeOccurrence,
+                RoundRepository roundRepository) {
+            this.groupId = groupId;
+            this.name = name;
+            this.admin = admin;
+            this.participants = participants;
+            this.sessions = sessions;
+            this.activeOccurrence = activeOccurrence;
+            this.roundRepository = roundRepository;
+        }
+
+        @Override
+        public void save(Group group) {
+            throw new AssertionError("Adding a round should persist the round, not an in-memory group instance");
+        }
+
+        @Override
+        public Optional<Group> findById(GroupId id) {
+            if (!groupId.equals(id)) {
+                return Optional.empty();
+            }
+            Group restoredGroup = Group.restore(
+                    groupId,
+                    name,
+                    null,
+                    admin,
+                    participants,
+                    sessions,
+                    activeOccurrence,
+                    roundRepository.findByOccurrence(activeOccurrence));
+            return Optional.of(restoredGroup);
+        }
+    }
+
+    private static class InMemoryRoundRepository implements RoundRepository {
+
+        private final List<Round> savedRounds = new ArrayList<>();
+
+        @Override
+        public void save(Round round) {
+            savedRounds.add(round);
+        }
+
+        @Override
+        public List<Round> findByOccurrence(SessionOccurrence occurrence) {
+            return savedRounds.stream()
+                    .filter(round -> round.occurrence().equals(occurrence))
+                    .toList();
         }
     }
 }
