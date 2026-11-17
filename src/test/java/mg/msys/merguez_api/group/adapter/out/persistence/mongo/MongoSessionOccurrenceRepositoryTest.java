@@ -182,6 +182,86 @@ class MongoSessionOccurrenceRepositoryTest {
     }
 
     @Test
+    @DisplayName("Persisted rounds and assignments support continued session operations")
+    void restoredRoundsDetermineNextNumberAndAvailableParticipants() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId first = new UserId(UUID.randomUUID());
+        UserId second = new UserId(UUID.randomUUID());
+        UserId third = new UserId(UUID.randomUUID());
+        UserId fourth = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(first, second, third, fourth));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.of(18, 30));
+        SessionOccurrence occurrence =
+                new SessionOccurrence(group.id(), session.id(), Instant.parse("2026-03-04T05:06:07.123Z"));
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+
+        Round firstRound = new Round(occurrence, 1, List.of(
+                new Combat(List.of(third, fourth), Optional.of(fourth))));
+        Round secondRound = new Round(occurrence, 2, List.of(
+                new Combat(List.of(first, second), Optional.empty())));
+        roundRepository.save(secondRound);
+        roundRepository.save(firstRound);
+
+        Group restored = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+        assertEquals(List.of(occurrence), restored.activeOccurrences());
+        assertEquals(List.of(firstRound, secondRound), restored.rounds(occurrence));
+
+        Combat conflictingCombat = new Combat(List.of(first, third), Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> restored.addCombat(admin, secondRound, conflictingCombat));
+        assertEquals(List.of(firstRound, secondRound), restored.rounds(occurrence));
+
+        Combat availableCombat = new Combat(List.of(third, fourth), Optional.empty());
+        Round updatedSecondRound = restored.addCombat(admin, secondRound, availableCombat);
+        assertEquals(List.of(secondRound.combats().get(0), availableCombat), updatedSecondRound.combats());
+
+        Round nextRound = restored.addRound(admin, occurrence, List.of(
+                new Combat(List.of(first, third), Optional.empty())));
+        assertEquals(3, nextRound.number());
+        assertEquals(List.of(firstRound, updatedSecondRound, nextRound), restored.rounds(occurrence));
+    }
+
+    @Test
+    @DisplayName("A legacy active occurrence without rounds can be continued")
+    void legacyActiveOccurrenceWithoutRoundsCanBeContinued() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.of(18, 30));
+        SessionOccurrence occurrence =
+                new SessionOccurrence(group.id(), session.id(), Instant.parse("2026-03-04T05:06:07.123Z"));
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        mongoTemplate.getCollection("session-occurrences").updateOne(
+                new Document("groupId", group.id().value().toString()),
+                new Document("$unset", new Document("rounds", "").append("startedAtExact", "")));
+
+        Group restored = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+        assertEquals(List.of(occurrence), restored.activeOccurrences());
+        assertTrue(restored.rounds(occurrence).isEmpty());
+        Round firstRound = restored.addRound(admin, occurrence, List.of(
+                new Combat(List.of(admin, member), Optional.empty())));
+        assertEquals(1, firstRound.number());
+        roundRepository.save(firstRound);
+        assertEquals(List.of(firstRound),
+                activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().rounds(occurrence));
+    }
+
+    @Test
+    @DisplayName("Loading an active occurrence requires both its group and occurrence")
+    void activeOccurrenceLoaderReturnsEmptyWhenGroupOrOccurrenceIsMissing() {
+        UserId admin = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(new UserId(UUID.randomUUID())));
+        groupRepository.save(group);
+        assertTrue(activeOccurrenceLoader.loadByGroupId(group.id()).isEmpty());
+
+        GroupId missingGroup = GroupId.random();
+        occurrenceRepository.save(new SessionOccurrence(
+                missingGroup, UUID.randomUUID(), Instant.parse("2026-03-04T05:06:07.123Z")));
+        assertTrue(activeOccurrenceLoader.loadByGroupId(missingGroup).isEmpty());
+    }
+
+    @Test
     @DisplayName("Mongo indexes enforce one active occurrence per group, including concurrent saves")
     void activeOccurrenceIndexesEnforceUniquenessAndHistoryLookup() throws Exception {
         GroupId occupiedGroupId = GroupId.random();
