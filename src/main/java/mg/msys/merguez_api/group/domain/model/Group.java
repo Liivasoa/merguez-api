@@ -68,6 +68,21 @@ public final class Group {
         return group;
     }
 
+    public static Group restore(
+            GroupId id,
+            String name,
+            String description,
+            UserId creator,
+            List<UserId> participants,
+            List<Session> sessions,
+            SessionOccurrence activeOccurrence,
+            List<Round> rounds) {
+        Group group = restore(id, name, description, creator, participants, sessions);
+        group.activeOccurrences.add(activeOccurrence);
+        group.roundsByOccurrence.put(activeOccurrence, new ArrayList<>(rounds));
+        return group;
+    }
+
     public Session createSession(UserId requester, String name, DayOfWeek day, LocalTime startTime) {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can create sessions");
@@ -164,6 +179,11 @@ public final class Group {
 
     public List<SessionOccurrence> activeOccurrences() {
         return List.copyOf(activeOccurrences);
+    }
+
+    public List<Round> rounds(SessionOccurrence occurrence) {
+        List<Round> rounds = roundsByOccurrence.get(occurrence);
+        return rounds == null ? List.of() : List.copyOf(rounds);
     }
 
     private boolean isMemberOrAdmin(UserId requester) {
