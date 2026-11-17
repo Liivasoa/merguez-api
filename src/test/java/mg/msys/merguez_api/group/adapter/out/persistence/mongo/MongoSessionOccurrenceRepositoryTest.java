@@ -23,6 +23,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -37,6 +38,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.mongodb.test.autoconfigure.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -51,13 +54,17 @@ import org.testcontainers.mongodb.MongoDBContainer;
 
 import mg.msys.merguez_api.group.adapter.in.rest.GroupController;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
+import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
 import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
+import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
+import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
@@ -65,6 +72,12 @@ import mg.msys.merguez_api.user.domain.model.UserId;
 @DataMongoTest(properties = "spring.data.mongodb.auto-index-creation=true")
 @Testcontainers
 @Import({MongoGroupRepository.class, MongoSessionOccurrenceRepository.class})
+@ComponentScan(
+        basePackageClasses = MongoGroupRepository.class,
+        useDefaultFilters = false,
+        includeFilters = @ComponentScan.Filter(
+                type = FilterType.ASSIGNABLE_TYPE,
+                classes = {RoundRepository.class, LoadGroupWithActiveOccurrencePort.class}))
 class MongoSessionOccurrenceRepositoryTest {
 
     @Container
@@ -76,6 +89,12 @@ class MongoSessionOccurrenceRepositoryTest {
 
     @Autowired
     SessionOccurrenceRepository occurrenceRepository;
+
+    @Autowired(required = false)
+    RoundRepository roundRepository;
+
+    @Autowired(required = false)
+    LoadGroupWithActiveOccurrencePort activeOccurrenceLoader;
 
     @Autowired
     MongoTemplate mongoTemplate;
@@ -122,6 +141,44 @@ class MongoSessionOccurrenceRepositoryTest {
                 () -> assertTrue(occurrenceDocument.get("startedAt") instanceof Date),
                 () -> assertEquals(Date.from(startedAt), occurrenceDocument.get("startedAt")),
                 () -> assertEquals(plannedGroupBefore, plannedGroupAfter));
+    }
+
+    @Test
+    @DisplayName("A saved round and its replacement retain occurrence, participants and optional winners")
+    void savedRoundAndReplacementRestoreCombatsAndWinners() {
+        assertAll(
+                () -> assertNotNull(roundRepository, "A Mongo round repository must be available"),
+                () -> assertNotNull(activeOccurrenceLoader, "A Mongo active occurrence loader must be available"));
+
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId first = new UserId(UUID.randomUUID());
+        UserId second = new UserId(UUID.randomUUID());
+        UserId third = new UserId(UUID.randomUUID());
+        UserId fourth = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(first, second, third, fourth));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.of(18, 30));
+        SessionOccurrence occurrence =
+                new SessionOccurrence(group.id(), session.id(), Instant.parse("2026-03-04T05:06:07.123Z"));
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+
+        Round initial = new Round(occurrence, 1, List.of(
+                new Combat(List.of(first, second), Optional.of(first)),
+                new Combat(List.of(third, fourth), Optional.empty())));
+        roundRepository.save(initial);
+
+        Group restored = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+        assertEquals(List.of(occurrence), restored.activeOccurrences());
+        assertEquals(List.of(initial), restored.rounds(occurrence));
+
+        Round replacement = new Round(occurrence, 1, List.of(
+                new Combat(List.of(first, third), Optional.empty()),
+                new Combat(List.of(second, fourth), Optional.of(fourth))));
+        roundRepository.save(replacement);
+
+        Group restoredAfterReplacement = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+        assertEquals(List.of(occurrence), restoredAfterReplacement.activeOccurrences());
+        assertEquals(List.of(replacement), restoredAfterReplacement.rounds(occurrence));
     }
 
     @Test
