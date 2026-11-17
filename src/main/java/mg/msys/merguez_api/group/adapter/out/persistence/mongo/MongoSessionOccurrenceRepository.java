@@ -3,6 +3,10 @@ package mg.msys.merguez_api.group.adapter.out.persistence.mongo;
 import static org.springframework.data.domain.Sort.Direction.ASC;
 import static org.springframework.data.domain.Sort.Direction.DESC;
 
+import java.util.regex.Pattern;
+
+import com.mongodb.MongoWriteException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.index.Index;
 import org.springframework.data.mongodb.core.index.PartialIndexFilter;
@@ -15,6 +19,11 @@ import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 
 @Repository
 class MongoSessionOccurrenceRepository implements SessionOccurrenceRepository {
+
+    private static final String ACTIVE_INDEX = "active_occurrence_per_group";
+    private static final Pattern ACTIVE_INDEX_DUPLICATE = Pattern.compile(
+            "^E11000 duplicate key error collection: \\S+\\.session-occurrences index: "
+                    + ACTIVE_INDEX + " dup key: \\{");
 
     private final SpringDataSessionOccurrenceRepository repository;
     private final MongoTemplate mongoTemplate;
@@ -36,7 +45,17 @@ class MongoSessionOccurrenceRepository implements SessionOccurrenceRepository {
     @Override
     public void save(SessionOccurrence occurrence) {
         ensureIndexes();
-        repository.save(SessionOccurrenceDocument.from(occurrence));
+        try {
+            repository.save(SessionOccurrenceDocument.from(occurrence));
+        } catch (DuplicateKeyException exception) {
+            if (exception.getCause() instanceof MongoWriteException mongoFailure
+                    && mongoFailure.getError().getCode() == 11000
+                    && mongoFailure.getError().getMessage() != null
+                    && ACTIVE_INDEX_DUPLICATE.matcher(mongoFailure.getError().getMessage()).find()) {
+                throw new IllegalStateException("A session is already started in this group", exception);
+            }
+            throw exception;
+        }
     }
 
     private void ensureIndexes() {
@@ -53,7 +72,7 @@ class MongoSessionOccurrenceRepository implements SessionOccurrenceRepository {
                             .unique()
                             .partial(PartialIndexFilter.of(Criteria.where("status")
                                     .is(SessionOccurrenceDocument.IN_PROGRESS_STATUS)))
-                            .named("active_occurrence_per_group"));
+                            .named(ACTIVE_INDEX));
             mongoTemplate.indexOps(SessionOccurrenceDocument.class)
                     .ensureIndex(new Index()
                             .on("groupId", ASC)
