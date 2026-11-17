@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.DayOfWeek;
@@ -21,6 +22,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import mg.msys.merguez_api.group.application.command.AddRoundCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
+import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
@@ -224,15 +226,91 @@ class StartSessionUseCaseTest {
         assertEquals(List.of(), loadedGroup.rounds(persistedOccurrence));
 
         AddRoundUseCase useCase = new AddRoundUseCase(groupLoader, roundRepository);
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        RoundOperationRefusedException exception = assertThrowsExactly(
+                RoundOperationRefusedException.class,
                 () -> useCase.execute(new AddRoundCommand(groupId, member, List.of())));
 
         Group reloadedGroup = groupLoader.loadByGroupId(groupId).orElseThrow();
         assertAll(
-                () -> assertEquals("A round must contain at least one combat", exception.getMessage()),
+                () -> assertEquals(IllegalArgumentException.class, exception.getCause().getClass()),
+                () -> assertEquals("A round must contain at least one combat", exception.getCause().getMessage()),
                 () -> assertEquals(0, roundRepository.savedRounds.size()),
                 () -> assertEquals(List.of(), reloadedGroup.rounds(reloadedGroup.activeOccurrences().getFirst())));
+    }
+
+    @Test
+    void refusesRoundWhenLoaderFindsNoActiveOccurrenceWithoutSaving() {
+        UserId admin = userId();
+        UserId member = userId();
+        GroupId groupId = GroupId.random();
+        InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
+        LoadGroupWithActiveOccurrencePort groupLoader = new ReloadingActiveOccurrenceGroupLoader(
+                groupId, "Training group", admin, List.of(member), List.of(),
+                new InMemorySessionOccurrenceRepository(), roundRepository);
+        AddRoundUseCase useCase = new AddRoundUseCase(groupLoader, roundRepository);
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+
+        assertTrue(groupLoader.loadByGroupId(groupId).isEmpty());
+        assertThrowsExactly(
+                RoundOperationRefusedException.class,
+                () -> useCase.execute(new AddRoundCommand(groupId, member, List.of(combat))));
+        assertEquals(0, roundRepository.savedRounds.size());
+    }
+
+    @Test
+    void treatsLoadedGroupWithoutActiveOccurrenceAsLoaderContractViolation() {
+        UserId admin = userId();
+        UserId member = userId();
+        Group group = Group.restore(GroupId.random(), "Training group", null, admin, List.of(member));
+        InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
+        AddRoundUseCase useCase = new AddRoundUseCase(id -> Optional.of(group), roundRepository);
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+
+        IllegalStateException exception = assertThrowsExactly(
+                IllegalStateException.class,
+                () -> useCase.execute(new AddRoundCommand(group.id(), member, List.of(combat))));
+
+        assertAll(
+                () -> assertEquals("Loaded group has no active session occurrence", exception.getMessage()),
+                () -> assertEquals(0, roundRepository.savedRounds.size()));
+    }
+
+    @Test
+    void propagatesLoaderFailureUnchangedWithoutSavingRound() {
+        UserId admin = userId();
+        UserId member = userId();
+        GroupId groupId = GroupId.random();
+        IllegalArgumentException failure = new IllegalArgumentException("Corrupt persisted group");
+        InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
+        AddRoundUseCase useCase = new AddRoundUseCase(id -> { throw failure; }, roundRepository);
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+
+        IllegalArgumentException exception = assertThrowsExactly(
+                IllegalArgumentException.class,
+                () -> useCase.execute(new AddRoundCommand(groupId, member, List.of(combat))));
+
+        assertAll(
+                () -> assertSame(failure, exception),
+                () -> assertEquals(0, roundRepository.savedRounds.size()));
+    }
+
+    @Test
+    void propagatesRoundSaveFailureUnchanged() {
+        UserId admin = userId();
+        UserId member = userId();
+        Group group = Group.restore(GroupId.random(), "Training group", null, admin, List.of(member));
+        Session session = group.createSession(admin, "Training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        group.startSession(admin, session);
+        IllegalArgumentException failure = new IllegalArgumentException("Round storage failed");
+        AddRoundUseCase useCase = new AddRoundUseCase(
+                id -> Optional.of(group), round -> { throw failure; });
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+
+        IllegalArgumentException exception = assertThrowsExactly(
+                IllegalArgumentException.class,
+                () -> useCase.execute(new AddRoundCommand(group.id(), member, List.of(combat))));
+
+        assertSame(failure, exception);
     }
 
     private static UserId userId() {
