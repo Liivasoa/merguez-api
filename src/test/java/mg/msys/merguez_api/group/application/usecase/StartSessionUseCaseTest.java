@@ -202,6 +202,39 @@ class StartSessionUseCaseTest {
                 () -> assertEquals(List.of(combat), reloadedGroup.rounds(persistedOccurrence).getFirst().combats()));
     }
 
+    @Test
+    void propagatesEmptyInitialRoundRefusalWithoutPersistingRound() {
+        UserId admin = userId();
+        UserId member = userId();
+        GroupId groupId = GroupId.random();
+        Group initialGroup = Group.restore(groupId, "Training group", null, admin, List.of(member));
+        Session session = initialGroup.createSession(
+                admin, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        SessionOccurrence originalOccurrence = initialGroup.startSession(admin, session);
+        InMemorySessionOccurrenceRepository occurrenceRepository = new InMemorySessionOccurrenceRepository();
+        occurrenceRepository.save(new SessionOccurrence(
+                originalOccurrence.groupId(), originalOccurrence.scheduleId(), originalOccurrence.startedAt()));
+        InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
+        ReloadingActiveOccurrenceGroupLoader groupLoader = new ReloadingActiveOccurrenceGroupLoader(
+                groupId, "Training group", admin, List.of(member), List.of(session), occurrenceRepository, roundRepository);
+        Group loadedGroup = groupLoader.loadByGroupId(groupId).orElseThrow();
+        SessionOccurrence persistedOccurrence = loadedGroup.activeOccurrences().getFirst();
+        assertNotSame(initialGroup, loadedGroup);
+        assertNotSame(originalOccurrence, persistedOccurrence);
+        assertEquals(List.of(), loadedGroup.rounds(persistedOccurrence));
+
+        AddRoundUseCase useCase = new AddRoundUseCase(groupLoader, roundRepository);
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> useCase.execute(new AddRoundCommand(groupId, member, List.of())));
+
+        Group reloadedGroup = groupLoader.loadByGroupId(groupId).orElseThrow();
+        assertAll(
+                () -> assertEquals("A round must contain at least one combat", exception.getMessage()),
+                () -> assertEquals(0, roundRepository.savedRounds.size()),
+                () -> assertEquals(List.of(), reloadedGroup.rounds(reloadedGroup.activeOccurrences().getFirst())));
+    }
+
     private static UserId userId() {
         return new UserId(UUID.randomUUID());
     }
