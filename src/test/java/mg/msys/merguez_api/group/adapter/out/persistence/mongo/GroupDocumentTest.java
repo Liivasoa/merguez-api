@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupMember;
 import mg.msys.merguez_api.group.domain.model.Role;
+import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class GroupDocumentTest {
@@ -38,6 +39,31 @@ class GroupDocumentTest {
                         List.of(new GroupMember(creator, Role.ADMIN), new GroupMember(participant, Role.MEMBER)),
                         restored.members()),
                 () -> assertEquals(List.of(session), restored.sessions()));
+    }
+
+    @Test
+    @DisplayName("A scheduled session ID is persisted and restored")
+    void groupDocumentPersistsAndRestoresScheduledSessionId() {
+        UserId creator = new UserId(UUID.randomUUID());
+        UserId participant = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", "Weekly practice", creator, List.of(participant));
+        UUID sessionId = UUID.randomUUID();
+        Session session = new Session(
+                group.id(), sessionId, "Tuesday practice", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        Group groupWithSession = Group.restore(
+                group.id(),
+                group.name(),
+                group.description().orElse(null),
+                creator,
+                List.of(participant),
+                List.of(session));
+
+        GroupDocument document = GroupDocument.from(groupWithSession);
+        Group restored = document.toGroup();
+
+        assertAll(
+                () -> assertEquals(sessionId.toString(), document.sessions().getFirst().id()),
+                () -> assertEquals(sessionId, restored.sessions().getFirst().id()));
     }
 
     @Test

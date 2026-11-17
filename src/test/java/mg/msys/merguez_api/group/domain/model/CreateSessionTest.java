@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -19,6 +20,108 @@ import org.junit.jupiter.api.Test;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class CreateSessionTest {
+
+    @Test
+    @DisplayName("A group member starts a scheduled session of their group")
+    void groupMemberStartsScheduledSessionOfTheirGroup() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(member));
+        var session = group.createSession(member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        var occurrence = group.startSession(member, session);
+
+        assertNotNull(occurrence);
+        assertNotSame(session, occurrence);
+        assertTrue(occurrence.isStarted());
+        assertEquals(group.id(), occurrence.groupId());
+        assertEquals(session.id(), occurrence.scheduleId());
+    }
+
+    @Test
+    @DisplayName("Starting a scheduled session creates a timestamped occurrence without changing the schedule")
+    void startingSessionCreatesTimestampedOccurrenceWithoutChangingSchedule() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(member));
+        var session = group.createSession(member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        var scheduledGroupId = session.groupId();
+        var scheduledName = session.name();
+        var scheduledDay = session.day();
+        var scheduledTime = session.startTime();
+        var scheduledId = session.id();
+
+        var occurrence = group.startSession(member, session);
+
+        assertNotSame(session, occurrence);
+        assertEquals(scheduledId, occurrence.scheduleId());
+        assertNotNull(occurrence.startedAt());
+        assertEquals(scheduledGroupId, session.groupId());
+        assertEquals(scheduledName, session.name());
+        assertEquals(scheduledDay, session.day());
+        assertEquals(scheduledTime, session.startTime());
+        assertEquals(scheduledId, session.id());
+        assertTrue(group.sessions().contains(session));
+    }
+
+    @Test
+    @DisplayName("A group rejects a second started session and keeps the first as its only active occurrence")
+    void groupRejectsSecondStartedSessionAndKeepsFirstAsOnlyActiveOccurrence() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(member));
+        var firstSession = group.createSession(member, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(9, 0));
+        var secondSession =
+                group.createSession(member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(18, 0));
+        var firstOccurrence = group.startSession(member, firstSession);
+
+        assertThrows(IllegalStateException.class, () -> group.startSession(member, secondSession));
+
+        assertEquals(List.of(firstOccurrence), group.activeOccurrences());
+    }
+
+    @Test
+    @DisplayName("Different groups can each have their own active session occurrence")
+    void differentGroupsCanEachHaveTheirOwnActiveSessionOccurrence() {
+        UserId firstAdmin = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        Group firstGroup = Group.create("Tuesday dojo", firstAdmin, List.of(firstMember));
+        var firstSession =
+                firstGroup.createSession(firstMember, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(9, 0));
+        var firstOccurrence = firstGroup.startSession(firstMember, firstSession);
+
+        UserId secondAdmin = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        Group secondGroup = Group.create("Thursday dojo", secondAdmin, List.of(secondMember));
+        var secondSession =
+                secondGroup.createSession(secondMember, "Evening training", DayOfWeek.THURSDAY, LocalTime.of(18, 0));
+
+        assertTrue(secondGroup.activeOccurrences().isEmpty());
+
+        var secondOccurrence = secondGroup.startSession(secondMember, secondSession);
+
+        assertNotSame(firstOccurrence, secondOccurrence);
+        assertEquals(secondGroup.id(), secondOccurrence.groupId());
+        assertEquals(List.of(firstOccurrence), firstGroup.activeOccurrences());
+        assertEquals(List.of(secondOccurrence), secondGroup.activeOccurrences());
+    }
+
+    @Test
+    @DisplayName("A group admin starts a scheduled session of their group")
+    void groupAdminStartsScheduledSessionOfTheirGroup() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(member));
+        var session = group.createSession(member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+
+        var occurrence = group.startSession(admin, session);
+
+        assertNotNull(occurrence);
+        assertNotSame(session, occurrence);
+        assertTrue(occurrence.isStarted());
+        assertEquals(group.id(), occurrence.groupId());
+        assertEquals(session.id(), occurrence.scheduleId());
+    }
 
     @Test
     @DisplayName("A group member creates a named session for their group")

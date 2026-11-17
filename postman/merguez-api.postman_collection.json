@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7b1f2c4e-3a5d-4e8b-9c1a-5e2d0a0f0001",
     "name": "Merguez API",
-    "description": "Requests for the Merguez API. Import this file into Postman, then adjust the baseUrl collection variable if needed. Run Create group first to populate groupId for the session requests; create a new group before rerunning successful session creation requests with the same schedule.",
+    "description": "Requests for the Merguez API. Import this file into Postman, then adjust the baseUrl collection variable if needed. Run Create group, Create session, and List group sessions in order to populate groupId and sessionId before starting a session. Create a new group before rerunning successful session creation requests with the same schedule.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -23,6 +23,11 @@
     },
     {
       "key": "groupId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
       "value": "",
       "type": "string"
     }
@@ -344,10 +349,18 @@
                       "    pm.expect(sessions).to.be.an('array');",
                       "    sessions.forEach(function (session) {",
                       "        pm.expect(session.groupId).to.equal(pm.variables.get('groupId'));",
+                      "        pm.expect(session.id).to.be.a('string').and.not.empty;",
                       "        pm.expect(session.name).to.be.a('string').and.not.empty;",
                       "        pm.expect(session.day).to.be.a('string');",
                       "        pm.expect(session.startTime).to.be.a('string');",
                       "    });",
+                      "    const sessionToStart = sessions.find(function (session) {",
+                      "        return session.name === 'Evening training';",
+                      "    });",
+                      "    pm.expect(sessionToStart, 'Evening training session').to.exist;",
+                      "    if (sessionToStart && typeof sessionToStart.id === 'string') {",
+                      "        pm.collectionVariables.set('sessionId', sessionToStart.id);",
+                      "    }",
                       "});"
                     ]
                   }
@@ -360,6 +373,87 @@
                   "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "v1", "groups", "{{groupId}}", "sessions"]
+                }
+              }
+            },
+            {
+              "name": "Start session",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 200 OK', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Started occurrence matches the selected session', function () {",
+                      "    const occurrence = pm.response.json();",
+                      "    pm.expect(occurrence.groupId).to.equal(pm.variables.get('groupId'));",
+                      "    pm.expect(occurrence.scheduleId).to.equal(pm.variables.get('sessionId'));",
+                      "    pm.expect(occurrence.startedAt).to.be.a('string').and.not.empty;",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{participantId}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/{{sessionId}}/start",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions", "{{sessionId}}", "start"]
+                }
+              }
+            },
+            {
+              "name": "Start session - already active (409)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 409 Conflict', function () {",
+                      "    pm.response.to.have.status(409);",
+                      "});",
+                      "",
+                      "pm.test('Response is a ProblemDetail without internal details', function () {",
+                      "    const problem = pm.response.json();",
+                      "    pm.expect(problem.status).to.equal(409);",
+                      "    pm.expect(problem.detail).to.equal('A session is already started in this group.');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{participantId}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/{{sessionId}}/start",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions", "{{sessionId}}", "start"]
                 }
               }
             },

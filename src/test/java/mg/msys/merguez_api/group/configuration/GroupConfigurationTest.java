@@ -8,9 +8,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
 
 class GroupConfigurationTest {
 
@@ -18,11 +20,13 @@ class GroupConfigurationTest {
     @ValueSource(classes = {
             CreateSessionUseCase.class,
             GetGroupSessionsUseCase.class,
-            CreateGroupUseCase.class
+            CreateGroupUseCase.class,
+            StartSessionUseCase.class
     })
     void registersGroupUseCasesAsSpringBeans(Class<?> useCaseType) {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.registerBean(GroupRepository.class, () -> mock(GroupRepository.class));
+            context.registerBean(SessionOccurrenceRepository.class, () -> mock(SessionOccurrenceRepository.class));
             context.register(GroupConfiguration.class);
             context.refresh();
 

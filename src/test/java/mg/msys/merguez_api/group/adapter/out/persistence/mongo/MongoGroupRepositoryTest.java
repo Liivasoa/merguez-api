@@ -2,6 +2,8 @@ package mg.msys.merguez_api.group.adapter.out.persistence.mongo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +22,7 @@ import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupMember;
 import mg.msys.merguez_api.group.domain.model.Role;
+import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 @DataMongoTest
@@ -69,5 +72,28 @@ class MongoGroupRepositoryTest {
         Optional<Group> found = repository.findById(group.id());
         assertEquals(Optional.of(group), found);
         assertEquals(Optional.empty(), found.get().description());
+    }
+
+    @Test
+    @DisplayName("A scheduled session ID is persisted and restored by MongoDB")
+    void savedGroupRetainsScheduledSessionId() {
+        UserId alice = new UserId(UUID.randomUUID());
+        UserId bob = new UserId(UUID.randomUUID());
+        Group group = Group.create("Dojo du mardi", "Weekly practice", alice, List.of(bob));
+        UUID sessionId = UUID.randomUUID();
+        Session session = new Session(
+                group.id(), sessionId, "Tuesday practice", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        Group groupWithSession = Group.restore(
+                group.id(),
+                group.name(),
+                group.description().orElse(null),
+                alice,
+                List.of(bob),
+                List.of(session));
+
+        repository.save(groupWithSession);
+
+        Optional<Group> found = repository.findById(group.id());
+        assertEquals(Optional.of(sessionId), found.map(saved -> saved.sessions().getFirst().id()));
     }
 }

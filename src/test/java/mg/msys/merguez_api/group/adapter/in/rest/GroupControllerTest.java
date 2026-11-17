@@ -21,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -44,15 +45,18 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
+import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.Session;
+import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 @WebMvcTest(GroupController.class)
@@ -69,6 +73,85 @@ class GroupControllerTest {
 
     @MockitoBean
     private GetGroupSessionsUseCase getGroupSessionsUseCase;
+
+    @MockitoBean
+    private StartSessionUseCase startSessionUseCase;
+
+    @Test
+    @DisplayName("POST a scheduled session start forwards its identifiers and returns the recorded occurrence")
+    void startScheduledSessionForwardsRequestAndReturnsRecordedOccurrence() throws Exception {
+        GroupId groupId = GroupId.random();
+        UUID scheduledSessionId = UUID.randomUUID();
+        UserId requester = new UserId(UUID.randomUUID());
+        Instant startedAt = Instant.parse("2026-11-16T21:13:53Z");
+        when(startSessionUseCase.execute(any(StartSessionCommand.class)))
+                .thenReturn(new SessionOccurrence(groupId, scheduledSessionId, startedAt));
+        String requestBody = """
+                {
+                  "requesterId": "%s"
+                }
+                """.formatted(requester.value());
+
+        mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/sessions/{sessionId}/start",
+                        groupId.value(),
+                        scheduledSessionId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.groupId").value(groupId.value().toString()))
+                .andExpect(jsonPath("$.scheduleId").value(scheduledSessionId.toString()))
+                .andExpect(jsonPath("$.startedAt").value(startedAt.toString()));
+
+        verify(startSessionUseCase).execute(new StartSessionCommand(groupId, requester, scheduledSessionId));
+    }
+
+    @Test
+    @DisplayName("POST a session start exposes an active-group refusal while another group can start")
+    void startSessionRefusedForActiveGroupDoesNotPreventStartInAnotherGroup() {
+        GroupId activeGroupId = GroupId.random();
+        GroupId otherGroupId = GroupId.random();
+        UUID refusedScheduleId = UUID.randomUUID();
+        UUID allowedScheduleId = UUID.randomUUID();
+        UserId activeGroupRequester = new UserId(UUID.randomUUID());
+        UserId otherGroupRequester = new UserId(UUID.randomUUID());
+        Instant startedAt = Instant.parse("2026-11-16T21:13:53Z");
+        String sensitiveDetail = "private internal active session details";
+        StartSessionCommand refusedCommand =
+                new StartSessionCommand(activeGroupId, activeGroupRequester, refusedScheduleId);
+        StartSessionCommand allowedCommand =
+                new StartSessionCommand(otherGroupId, otherGroupRequester, allowedScheduleId);
+        when(startSessionUseCase.execute(refusedCommand)).thenThrow(new IllegalStateException(sensitiveDetail));
+        when(startSessionUseCase.execute(allowedCommand))
+                .thenReturn(new SessionOccurrence(otherGroupId, allowedScheduleId, startedAt));
+
+        assertAll(
+                () -> mockMvc.perform(post(
+                                "/api/v1/groups/{groupId}/sessions/{sessionId}/start",
+                                activeGroupId.value(),
+                                refusedScheduleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requesterId\":\"%s\"}".formatted(activeGroupRequester.value())))
+                        .andExpect(status().isConflict())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.status").value(409))
+                        .andExpect(jsonPath("$.detail").value("A session is already started in this group."))
+                        .andExpect(content().string(not(containsString(sensitiveDetail)))),
+                () -> mockMvc.perform(post(
+                                "/api/v1/groups/{groupId}/sessions/{sessionId}/start",
+                                otherGroupId.value(),
+                                allowedScheduleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requesterId\":\"%s\"}".formatted(otherGroupRequester.value())))
+                        .andExpect(status().isOk())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                        .andExpect(jsonPath("$.groupId").value(otherGroupId.value().toString()))
+                        .andExpect(jsonPath("$.scheduleId").value(allowedScheduleId.toString()))
+                        .andExpect(jsonPath("$.startedAt").value(startedAt.toString())),
+                () -> verify(startSessionUseCase).execute(refusedCommand),
+                () -> verify(startSessionUseCase).execute(allowedCommand));
+    }
 
     @Test
     @DisplayName("POST and GET sessions for a missing group return 404 ProblemDetail without saving")
@@ -116,7 +199,7 @@ class GroupControllerTest {
         DayOfWeek day = DayOfWeek.TUESDAY;
         LocalTime startTime = LocalTime.of(14, 30);
         when(createSessionUseCase.execute(any(CreateSessionCommand.class)))
-                .thenReturn(new Session(groupId, "Created session", day, startTime));
+                .thenReturn(new Session(groupId, UUID.randomUUID(), "Created session", day, startTime));
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -204,7 +287,7 @@ class GroupControllerTest {
         GroupId groupId = GroupId.random();
         UserId requester = new UserId(UUID.randomUUID());
         LocalTime startTime = LocalTime.of(14, 30);
-        Session session = new Session(groupId, "Evening training", DayOfWeek.TUESDAY, startTime);
+        Session session = new Session(groupId, UUID.randomUUID(), "Evening training", DayOfWeek.TUESDAY, startTime);
         when(createSessionUseCase.execute(any(CreateSessionCommand.class))).thenReturn(session);
         when(getGroupSessionsUseCase.execute(groupId)).thenReturn(List.of(session));
         String requestBody = """
@@ -226,6 +309,7 @@ class GroupControllerTest {
         mockMvc.perform(get("/api/v1/groups/{groupId}/sessions", groupId.value()))
                 .andExpect(status().is2xxSuccessful())
                 .andExpect(jsonPath("$[0].groupId").value(groupId.value().toString()))
+                .andExpect(jsonPath("$[0].id").value(session.id().toString()))
                 .andExpect(jsonPath("$[0].name").value(session.name()))
                 .andExpect(jsonPath("$[0].day").value("TUESDAY"))
                 .andExpect(jsonPath("$[0].startTime").value(anyOf(is("14:30"), is("14:30:00"))));
