@@ -3,7 +3,8 @@ package mg.msys.merguez_api.group.application.usecase;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -15,8 +16,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import mg.msys.merguez_api.group.application.command.AddCombatCommand;
+import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
+import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
@@ -62,8 +65,8 @@ class AddCombatUseCaseTest {
                 List.of(scenario.firstMember(), scenario.thirdMember()), Optional.empty());
         AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), scenario.roundRepository());
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        RoundOperationRefusedException exception = assertThrowsExactly(
+                RoundOperationRefusedException.class,
                 () -> useCase.execute(new AddCombatCommand(
                         scenario.groupId(),
                         scenario.requester(),
@@ -73,10 +76,148 @@ class AddCombatUseCaseTest {
         Group reloadedGroup = scenario.groupLoader().loadByGroupId(scenario.groupId()).orElseThrow();
         Round reloadedRound = reloadedGroup.rounds(reloadedGroup.activeOccurrences().getFirst()).getFirst();
         assertAll(
-                () -> assertEquals("A participant can only appear in one combat per round", exception.getMessage()),
+                () -> assertEquals(IllegalArgumentException.class, exception.getCause().getClass()),
+                () -> assertEquals(
+                        "A participant can only appear in one combat per round", exception.getCause().getMessage()),
                 () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
                 () -> assertEquals(1, scenario.roundRepository().persistedRounds().size()),
                 () -> assertEquals(List.of(scenario.existingCombat()), reloadedRound.combats()));
+    }
+
+    @Test
+    void refusesMissingSelectedRoundWithoutSaving() {
+        Scenario scenario = scenario();
+        Combat availableCombat = new Combat(
+                List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
+        AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), scenario.roundRepository());
+
+        RoundOperationRefusedException exception = assertThrowsExactly(
+                RoundOperationRefusedException.class,
+                () -> useCase.execute(new AddCombatCommand(
+                        scenario.groupId(),
+                        scenario.requester(),
+                        scenario.existingRound().number() + 1,
+                        availableCombat)));
+
+        assertAll(
+                () -> assertEquals(IllegalArgumentException.class, exception.getCause().getClass()),
+                () -> assertEquals("Round not found", exception.getCause().getMessage()),
+                () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
+                () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
+    }
+
+    @Test
+    void refusesUnavailableActiveOccurrenceWithoutSaving() {
+        Scenario scenario = scenario();
+        LoadGroupWithActiveOccurrencePort groupLoader = ignored -> Optional.empty();
+        AddCombatUseCase useCase = new AddCombatUseCase(groupLoader, scenario.roundRepository());
+        Combat combat = new Combat(
+                List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
+
+        RoundOperationRefusedException exception = assertThrowsExactly(
+                RoundOperationRefusedException.class,
+                () -> useCase.execute(new AddCombatCommand(
+                        scenario.groupId(), scenario.requester(), scenario.existingRound().number(), combat)));
+
+        assertAll(
+                () -> assertEquals(IllegalStateException.class, exception.getCause().getClass()),
+                () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
+                () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
+    }
+
+    @Test
+    void treatsLoadedGroupWithoutActiveOccurrenceAsLoaderContractViolation() {
+        Scenario scenario = scenario();
+        Group loadedGroupWithoutOccurrence = Group.restore(
+                scenario.groupId(),
+                "Training group",
+                null,
+                scenario.firstMember(),
+                List.of(scenario.secondMember(), scenario.thirdMember(), scenario.fourthMember()));
+        LoadGroupWithActiveOccurrencePort groupLoader = ignored -> Optional.of(loadedGroupWithoutOccurrence);
+        AddCombatUseCase useCase = new AddCombatUseCase(groupLoader, scenario.roundRepository());
+        Combat combat = new Combat(
+                List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
+
+        assertThrowsExactly(
+                IllegalStateException.class,
+                () -> useCase.execute(new AddCombatCommand(
+                        scenario.groupId(), scenario.requester(), scenario.existingRound().number(), combat)));
+
+        assertAll(
+                () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
+                () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
+    }
+
+    @Test
+    void propagatesRoundRepositoryFailureUnchanged() {
+        Scenario scenario = scenario();
+        IllegalStateException repositoryFailure = new IllegalStateException("Round storage is unavailable");
+        RoundRepository failingRepository = round -> {
+            throw repositoryFailure;
+        };
+        AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), failingRepository);
+        Combat availableCombat = new Combat(
+                List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
+
+        IllegalStateException exception = assertThrowsExactly(
+                IllegalStateException.class,
+                () -> useCase.execute(new AddCombatCommand(
+                        scenario.groupId(),
+                        scenario.requester(),
+                        scenario.existingRound().number(),
+                        availableCombat)));
+
+        assertAll(
+                () -> assertSame(repositoryFailure, exception),
+                () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
+                () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
+    }
+
+    @Test
+    void propagatesGroupLoaderFailureUnchanged() {
+        Scenario scenario = scenario();
+        IllegalStateException loaderFailure = new IllegalStateException("Group data is corrupt");
+        LoadGroupWithActiveOccurrencePort failingLoader = ignored -> {
+            throw loaderFailure;
+        };
+        AddCombatUseCase useCase = new AddCombatUseCase(failingLoader, scenario.roundRepository());
+        Combat availableCombat = new Combat(
+                List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
+
+        IllegalStateException exception = assertThrowsExactly(
+                IllegalStateException.class,
+                () -> useCase.execute(new AddCombatCommand(
+                        scenario.groupId(),
+                        scenario.requester(),
+                        scenario.existingRound().number(),
+                        availableCombat)));
+
+        assertAll(
+                () -> assertSame(loaderFailure, exception),
+                () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
+                () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
+    }
+
+    @Test
+    void propagatesGroupAccessDenialUnchangedWithoutSaving() {
+        Scenario scenario = scenario();
+        AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), scenario.roundRepository());
+        Combat availableCombat = new Combat(
+                List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
+
+        GroupAccessDeniedException exception = assertThrowsExactly(
+                GroupAccessDeniedException.class,
+                () -> useCase.execute(new AddCombatCommand(
+                        scenario.groupId(),
+                        userId(),
+                        scenario.existingRound().number(),
+                        availableCombat)));
+
+        assertAll(
+                () -> assertEquals("Only group members can add combats", exception.getMessage()),
+                () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
+                () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
     }
 
     private static Scenario scenario() {
