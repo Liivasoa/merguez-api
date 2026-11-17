@@ -22,7 +22,8 @@ public final class AddRoundUseCase {
     public Round execute(AddRoundCommand command) {
         Group group = groupLoader.loadByGroupId(command.groupId())
                 .orElseThrow(() -> new IllegalStateException("Group or active session occurrence not found"));
-        SessionOccurrence occurrence = group.activeOccurrences().stream().findFirst().orElse(null);
+        SessionOccurrence occurrence = group.activeOccurrences().stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("Loaded group has no active session occurrence"));
         Round round = group.addRound(command.requester(), occurrence, command.combats());
         roundRepository.save(round);
         return round;
