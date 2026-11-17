@@ -29,6 +29,8 @@ Règles :
 Règles :
 - Un membre/admin peut démarrer une séance
 - Quand une séance est démarré, la date et heure de début doivent être enregistré
+- Une seule séance peut être démarré pour un groupe donnée
+
 
 ### En tant qu'admin ou membre d'un groupe, je veux ajouter des rounds dans une séance en cours
 
