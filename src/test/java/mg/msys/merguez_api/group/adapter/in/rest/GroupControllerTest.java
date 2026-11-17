@@ -44,11 +44,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import mg.msys.merguez_api.group.application.command.AddRoundCommand;
+import mg.msys.merguez_api.group.application.command.AddCombatCommand;
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
+import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
@@ -83,6 +85,9 @@ class GroupControllerTest {
 
     @MockitoBean
     private AddRoundUseCase addRoundUseCase;
+
+    @MockitoBean
+    private AddCombatUseCase addCombatUseCase;
 
     @Test
     @DisplayName("POST a scheduled session start forwards its identifiers and returns the recorded occurrence")
@@ -152,6 +157,57 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.combats[0].winnerId").value(firstMember.value().toString()));
 
         verify(addRoundUseCase).execute(new AddRoundCommand(groupId, requester, combats));
+    }
+
+    @Test
+    @DisplayName("POST an additional combat forwards its round and returns the updated round")
+    void addCombatToExistingRoundForwardsRequestAndReturnsUpdatedRound() throws Exception {
+        GroupId groupId = GroupId.random();
+        int roundNumber = 2;
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId existingFirstMember = new UserId(UUID.randomUUID());
+        UserId existingSecondMember = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        List<Combat> combats = List.of(
+                new Combat(List.of(existingFirstMember, existingSecondMember), Optional.of(existingFirstMember)),
+                new Combat(List.of(firstMember, secondMember), Optional.empty()));
+        Round updatedRound = new Round(
+                new SessionOccurrence(groupId, UUID.randomUUID(), Instant.parse("2026-11-16T21:13:53Z")),
+                roundNumber,
+                combats);
+        when(addCombatUseCase.execute(any(AddCombatCommand.class))).thenReturn(updatedRound);
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": ["%s", "%s"]
+                }
+                """.formatted(requester.value(), firstMember.value(), secondMember.value());
+
+        mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                        groupId.value(),
+                        roundNumber)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.number").value(roundNumber))
+                .andExpect(jsonPath("$.combats.length()").value(2))
+                .andExpect(jsonPath("$.combats[0].participantIds[0]")
+                        .value(existingFirstMember.value().toString()))
+                .andExpect(jsonPath("$.combats[0].participantIds[1]")
+                        .value(existingSecondMember.value().toString()))
+                .andExpect(jsonPath("$.combats[0].winnerId").value(existingFirstMember.value().toString()))
+                .andExpect(jsonPath("$.combats[1].participantIds[0]").value(firstMember.value().toString()))
+                .andExpect(jsonPath("$.combats[1].participantIds[1]").value(secondMember.value().toString()))
+                .andExpect(jsonPath("$.combats[1].winnerId").value(is((Object) null)));
+
+        verify(addCombatUseCase).execute(new AddCombatCommand(
+                groupId,
+                requester,
+                roundNumber,
+                new Combat(List.of(firstMember, secondMember), Optional.empty())));
     }
 
     @Test
