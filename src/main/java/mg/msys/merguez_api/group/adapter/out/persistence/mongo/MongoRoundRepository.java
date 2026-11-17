@@ -45,11 +45,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
             filter.append("startedAtExact", occurrence.startedAt().toString());
         }
         Document storedRound = new Document("number", round.number())
-                .append("combats", round.combats().stream()
-                        .map(combat -> new Document("participants", combat.participants().stream()
-                                        .map(user -> user.value().toString()).toList())
-                                .append("winner", combat.winner().map(user -> user.value().toString()).orElse(null)))
-                        .toList());
+                .append("combats", round.combats().stream().map(MongoRoundRepository::toStoredCombat).toList());
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
                 filter, new Document("$set", new Document("rounds." + round.number(), storedRound)));
         if (result.getMatchedCount() == 0) {
@@ -85,12 +81,26 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
     }
 
     private static Round toRound(Document stored, SessionOccurrence occurrence) {
-        List<Combat> combats = stored.getList("combats", Document.class).stream()
-                .map(combat -> new Combat(combat.getList("participants", String.class).stream()
-                                .map(MongoRoundRepository::userId).toList(),
-                        Optional.ofNullable(combat.getString("winner")).map(MongoRoundRepository::userId)))
-                .toList();
+        List<Combat> combats =
+                stored.getList("combats", Document.class).stream().map(MongoRoundRepository::toCombat).toList();
         return new Round(occurrence, stored.getInteger("number"), combats);
+    }
+
+    private static Document toStoredCombat(Combat combat) {
+        List<String> participants = combat.participants().stream()
+                .map(user -> user.value().toString())
+                .toList();
+        String winner = combat.winner().map(user -> user.value().toString()).orElse(null);
+        return new Document("participants", participants).append("winner", winner);
+    }
+
+    private static Combat toCombat(Document stored) {
+        List<UserId> participants = stored.getList("participants", String.class).stream()
+                .map(MongoRoundRepository::userId)
+                .toList();
+        Optional<UserId> winner = Optional.ofNullable(stored.getString("winner"))
+                .map(MongoRoundRepository::userId);
+        return new Combat(participants, winner);
     }
 
     private static UserId userId(String value) {
