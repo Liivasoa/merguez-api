@@ -134,6 +134,34 @@ public final class Group {
         return round;
     }
 
+    public Round addCombat(UserId requester, Round round, Combat combat) {
+        if (!isMemberOrAdmin(requester)) {
+            throw new GroupAccessDeniedException("Only group members can add combats");
+        }
+        if (round == null || !activeOccurrences.contains(round.occurrence())) {
+            throw new IllegalStateException("Session occurrence must be in progress");
+        }
+        List<Round> rounds = roundsByOccurrence.get(round.occurrence());
+        int roundIndex = rounds == null ? -1 : rounds.indexOf(round);
+        if (roundIndex < 0) {
+            throw new IllegalArgumentException("Round must belong to this group");
+        }
+        if (!combat.participants().stream().allMatch(this::isMemberOrAdmin)) {
+            throw new IllegalArgumentException("Combat participants must belong to this group");
+        }
+        if (round.combats().stream()
+                .flatMap(existingCombat -> existingCombat.participants().stream())
+                .anyMatch(combat.participants()::contains)) {
+            throw new IllegalArgumentException("A participant can only appear in one combat per round");
+        }
+
+        List<Combat> updatedCombats = new ArrayList<>(round.combats());
+        updatedCombats.add(combat);
+        Round updatedRound = new Round(round.occurrence(), round.number(), updatedCombats);
+        rounds.set(roundIndex, updatedRound);
+        return updatedRound;
+    }
+
     public List<SessionOccurrence> activeOccurrences() {
         return List.copyOf(activeOccurrences);
     }
