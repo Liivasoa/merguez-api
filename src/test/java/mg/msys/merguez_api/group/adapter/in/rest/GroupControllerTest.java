@@ -43,18 +43,22 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import mg.msys.merguez_api.group.application.command.AddRoundCommand;
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
 import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
+import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
+import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
@@ -76,6 +80,9 @@ class GroupControllerTest {
 
     @MockitoBean
     private StartSessionUseCase startSessionUseCase;
+
+    @MockitoBean
+    private AddRoundUseCase addRoundUseCase;
 
     @Test
     @DisplayName("POST a scheduled session start forwards its identifiers and returns the recorded occurrence")
@@ -105,6 +112,46 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.startedAt").value(startedAt.toString()));
 
         verify(startSessionUseCase).execute(new StartSessionCommand(groupId, requester, scheduledSessionId));
+    }
+
+    @Test
+    @DisplayName("POST an initial round forwards its combat and winner and returns the assigned number")
+    void createInitialRoundForwardsCombatAndWinnerAndReturnsAssignedRound() throws Exception {
+        GroupId groupId = GroupId.random();
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        List<Combat> combats = List.of(
+                new Combat(List.of(firstMember, secondMember), Optional.of(firstMember)));
+        Round round = new Round(
+                new SessionOccurrence(groupId, UUID.randomUUID(), Instant.parse("2026-11-16T21:13:53Z")),
+                1,
+                combats);
+        when(addRoundUseCase.execute(any(AddRoundCommand.class))).thenReturn(round);
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "combats": [
+                    {
+                      "participantIds": ["%s", "%s"],
+                      "winnerId": "%s"
+                    }
+                  ]
+                }
+                """.formatted(requester.value(), firstMember.value(), secondMember.value(), firstMember.value());
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.number").value(1))
+                .andExpect(jsonPath("$.combats.length()").value(1))
+                .andExpect(jsonPath("$.combats[0].participantIds[0]").value(firstMember.value().toString()))
+                .andExpect(jsonPath("$.combats[0].participantIds[1]").value(secondMember.value().toString()))
+                .andExpect(jsonPath("$.combats[0].winnerId").value(firstMember.value().toString()));
+
+        verify(addRoundUseCase).execute(new AddRoundCommand(groupId, requester, combats));
     }
 
     @Test
