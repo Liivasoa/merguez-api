@@ -13,7 +13,9 @@ import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.GroupMember;
 import mg.msys.merguez_api.group.domain.model.Role;
+import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.Session;
+import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 @Document("groups")
@@ -31,6 +33,10 @@ record GroupDocument(
     }
 
     Group toGroup() {
+        return toGroup(null, List.of());
+    }
+
+    Group toGroup(SessionOccurrence occurrence, List<Round> rounds) {
         List<GroupMember> groupMembers = members.stream().map(MemberDocument::toGroupMember).toList();
         UserId creator = userIdsWithRole(groupMembers, Role.ADMIN).findFirst().orElseThrow();
         List<UserId> participants = userIdsWithRole(groupMembers, Role.MEMBER).toList();
@@ -38,7 +44,10 @@ record GroupDocument(
         List<SessionDocument> persistedSessions = sessions == null ? List.of() : sessions;
         List<Session> restoredSessions =
                 persistedSessions.stream().map(session -> session.toSession(groupId)).toList();
-        return Group.restore(groupId, name, description, creator, participants, restoredSessions);
+        if (occurrence == null) {
+            return Group.restore(groupId, name, description, creator, participants, restoredSessions);
+        }
+        return Group.restore(groupId, name, description, creator, participants, restoredSessions, occurrence, rounds);
     }
 
     private static Stream<UserId> userIdsWithRole(List<GroupMember> groupMembers, Role role) {
