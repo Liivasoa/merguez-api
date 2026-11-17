@@ -120,14 +120,10 @@ public class GroupController {
             return ResponseEntity.status(HttpStatus.CREATED).body(RoundResponse.from(round));
         } catch (IllegalArgumentException ex) {
             log.debug("Round creation refused", ex);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ProblemDetail.forStatusAndDetail(
-                            HttpStatus.BAD_REQUEST, "The round request was refused."));
+            return refusedRoundRequest(HttpStatus.BAD_REQUEST);
         } catch (IllegalStateException ex) {
             log.debug("Round creation refused", ex);
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ProblemDetail.forStatusAndDetail(
-                            HttpStatus.CONFLICT, "The round request was refused."));
+            return refusedRoundRequest(HttpStatus.CONFLICT);
         }
     }
 
@@ -141,15 +137,16 @@ public class GroupController {
             return ResponseEntity.ok(RoundResponse.from(round));
         } catch (IllegalArgumentException ex) {
             log.debug("Combat addition refused", ex);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ProblemDetail.forStatusAndDetail(
-                            HttpStatus.BAD_REQUEST, "The round request was refused."));
+            return refusedRoundRequest(HttpStatus.BAD_REQUEST);
         } catch (IllegalStateException ex) {
             log.debug("Combat addition refused", ex);
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ProblemDetail.forStatusAndDetail(
-                            HttpStatus.CONFLICT, "The round request was refused."));
+            return refusedRoundRequest(HttpStatus.CONFLICT);
         }
+    }
+
+    private ResponseEntity<ProblemDetail> refusedRoundRequest(HttpStatus status) {
+        return ResponseEntity.status(status)
+                .body(ProblemDetail.forStatusAndDetail(status, "The round request was refused."));
     }
 
     @PostMapping("/{groupId}/sessions/{sessionId}/start")
