@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import mg.msys.merguez_api.group.adapter.in.rest.request.AddCombatRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.request.CreateGroupRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.request.CreateRoundRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.request.CreateSessionRequest;
@@ -27,6 +28,7 @@ import mg.msys.merguez_api.group.adapter.in.rest.response.GroupResponse;
 import mg.msys.merguez_api.group.adapter.in.rest.response.RoundResponse;
 import mg.msys.merguez_api.group.adapter.in.rest.response.SessionOccurrenceResponse;
 import mg.msys.merguez_api.group.adapter.in.rest.response.SessionResponse;
+import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
@@ -47,6 +49,7 @@ public class GroupController {
     private final GetGroupSessionsUseCase getGroupSessionsUseCase;
     private final StartSessionUseCase startSessionUseCase;
     private final AddRoundUseCase addRoundUseCase;
+    private final AddCombatUseCase addCombatUseCase;
 
     @Autowired
     public GroupController(
@@ -54,12 +57,24 @@ public class GroupController {
             CreateSessionUseCase createSessionUseCase,
             GetGroupSessionsUseCase getGroupSessionsUseCase,
             StartSessionUseCase startSessionUseCase,
-            AddRoundUseCase addRoundUseCase) {
+            AddRoundUseCase addRoundUseCase,
+            AddCombatUseCase addCombatUseCase) {
         this.createGroupUseCase = createGroupUseCase;
         this.createSessionUseCase = createSessionUseCase;
         this.getGroupSessionsUseCase = getGroupSessionsUseCase;
         this.startSessionUseCase = startSessionUseCase;
         this.addRoundUseCase = addRoundUseCase;
+        this.addCombatUseCase = addCombatUseCase;
+    }
+
+    public GroupController(
+            CreateGroupUseCase createGroupUseCase,
+            CreateSessionUseCase createSessionUseCase,
+            GetGroupSessionsUseCase getGroupSessionsUseCase,
+            StartSessionUseCase startSessionUseCase,
+            AddRoundUseCase addRoundUseCase) {
+        this(createGroupUseCase, createSessionUseCase, getGroupSessionsUseCase,
+                startSessionUseCase, addRoundUseCase, null);
     }
 
     public GroupController(
@@ -102,6 +117,15 @@ public class GroupController {
             @Valid @RequestBody CreateRoundRequest request) {
         var round = addRoundUseCase.execute(request.toCommand(new GroupId(groupId)));
         return ResponseEntity.status(HttpStatus.CREATED).body(RoundResponse.from(round));
+    }
+
+    @PostMapping("/{groupId}/rounds/{roundNumber}/combats")
+    public ResponseEntity<RoundResponse> addCombat(
+            @PathVariable UUID groupId,
+            @PathVariable int roundNumber,
+            @Valid @RequestBody AddCombatRequest request) {
+        var round = addCombatUseCase.execute(request.toCommand(new GroupId(groupId), roundNumber));
+        return ResponseEntity.ok(RoundResponse.from(round));
     }
 
     @PostMapping("/{groupId}/sessions/{sessionId}/start")
