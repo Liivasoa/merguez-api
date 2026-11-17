@@ -48,14 +48,18 @@ class MongoSessionOccurrenceRepository implements SessionOccurrenceRepository {
         try {
             repository.save(SessionOccurrenceDocument.from(occurrence));
         } catch (DuplicateKeyException exception) {
-            if (exception.getCause() instanceof MongoWriteException mongoFailure
-                    && mongoFailure.getError().getCode() == 11000
-                    && mongoFailure.getError().getMessage() != null
-                    && ACTIVE_INDEX_DUPLICATE.matcher(mongoFailure.getError().getMessage()).find()) {
+            if (isActiveIndexDuplicate(exception)) {
                 throw new IllegalStateException("A session is already started in this group", exception);
             }
             throw exception;
         }
+    }
+
+    private static boolean isActiveIndexDuplicate(DuplicateKeyException exception) {
+        return exception.getCause() instanceof MongoWriteException mongoFailure
+                && mongoFailure.getError().getCode() == 11000
+                && mongoFailure.getError().getMessage() != null
+                && ACTIVE_INDEX_DUPLICATE.matcher(mongoFailure.getError().getMessage()).find();
     }
 
     private void ensureIndexes() {
