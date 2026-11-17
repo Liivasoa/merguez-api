@@ -78,6 +78,21 @@ public final class Group {
             SessionOccurrence activeOccurrence,
             List<Round> rounds) {
         Group group = restore(id, name, description, creator, participants, sessions);
+        if (activeOccurrence == null || !id.equals(activeOccurrence.groupId())) {
+            throw new IllegalArgumentException("Active occurrence must belong to this group");
+        }
+        if (group.sessions.stream().noneMatch(session -> session.id().equals(activeOccurrence.scheduleId()))) {
+            throw new IllegalArgumentException("Active occurrence must reference a scheduled session");
+        }
+        for (int index = 0; index < rounds.size(); index++) {
+            Round round = rounds.get(index);
+            if (round == null || !activeOccurrence.equals(round.occurrence())) {
+                throw new IllegalArgumentException("Restored rounds must belong to the active occurrence");
+            }
+            if (round.number() != index + 1) {
+                throw new IllegalArgumentException("Restored rounds must be numbered consecutively from one");
+            }
+        }
         group.activeOccurrences.add(activeOccurrence);
         group.roundsByOccurrence.put(activeOccurrence, new ArrayList<>(rounds));
         return group;
