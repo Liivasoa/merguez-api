@@ -6,7 +6,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -30,13 +39,23 @@ import org.springframework.boot.data.mongodb.test.autoconfigure.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.MediaType;
+import org.springframework.test.json.JsonCompareMode;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
 
+import mg.msys.merguez_api.group.adapter.in.rest.GroupController;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
+import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
+import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
+import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.Session;
@@ -153,6 +172,116 @@ class MongoSessionOccurrenceRepositoryTest {
         assertNull(historyIndex.get("partialFilterExpression"), "Expected the history index to be unfiltered");
     }
 
+    @Test
+    void activeIndexConflictIsTranslatedAndRetainsMongoFailure() {
+        GroupId groupId = GroupId.random();
+        occurrenceRepository.save(new SessionOccurrence(groupId, UUID.randomUUID(), Instant.now()));
+
+        IllegalStateException conflict = assertThrows(IllegalStateException.class, () ->
+                occurrenceRepository.save(new SessionOccurrence(groupId, UUID.randomUUID(), Instant.now())));
+
+        assertTrue(hasCause(conflict, DuplicateKeyException.class), "The Mongo duplicate key must remain available");
+        assertTrue(hasCause(conflict, com.mongodb.MongoWriteException.class), "The Mongo write failure must remain available");
+        assertEquals(1L, countActiveOccurrences(groupId));
+    }
+
+    @Test
+    void duplicateKeyFromAnotherMongoIndexIsNotTranslatedToActiveConflict() {
+        UUID scheduleId = UUID.randomUUID();
+        occurrenceRepository.save(new SessionOccurrence(GroupId.random(), scheduleId, Instant.now()));
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        String index = collection.createIndex(new Document("scheduleId", 1),
+                new com.mongodb.client.model.IndexOptions().unique(true).name("test_unique_schedule"));
+        try {
+            DuplicateKeyException failure = assertThrows(DuplicateKeyException.class, () ->
+                    occurrenceRepository.save(new SessionOccurrence(GroupId.random(), scheduleId, Instant.now())));
+            assertTrue(failure.getMessage().contains("test_unique_schedule"));
+        } finally {
+            collection.dropIndex(index);
+        }
+    }
+
+    @Test
+    void unrelatedPersistenceFailureIsNotTranslatedToActiveConflict() {
+        SpringDataSessionOccurrenceRepository delegate = mock(SpringDataSessionOccurrenceRepository.class);
+        var failure = new DataAccessResourceFailureException("database unavailable");
+        when(delegate.save(any(SessionOccurrenceDocument.class))).thenThrow(failure);
+        var repository = new MongoSessionOccurrenceRepository(delegate, mongoTemplate);
+
+        var thrown = assertThrows(DataAccessResourceFailureException.class, () ->
+                repository.save(new SessionOccurrence(GroupId.random(), UUID.randomUUID(), Instant.now())));
+
+        assertSame(failure, thrown);
+    }
+
+    @Test
+    void startRaceReturnsSameProblemAsPrecheckConflict() throws Exception {
+        UserId admin = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training group", admin, List.of(new UserId(UUID.randomUUID())));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.of(18, 30));
+        groupRepository.save(group);
+        SessionOccurrence winningOccurrence = new SessionOccurrence(group.id(), session.id(), Instant.now());
+        occurrenceRepository.save(winningOccurrence);
+        MockMvc baseline = startMvc(occurrenceRepository);
+        String expectedProblem = baseline.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/start",
+                        group.id().value(), session.id())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"requesterId\":\"%s\"}".formatted(admin.value())))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("A session is already started in this group."))
+                .andReturn().getResponse().getContentAsString();
+        mongoTemplate.getCollection("session-occurrences").deleteMany(new Document());
+
+        int[] calls = new int[2];
+        SessionOccurrenceRepository racingRepository = new SessionOccurrenceRepository() {
+            @Override
+            public boolean existsStartedByGroupId(GroupId id) {
+                calls[0]++;
+                boolean exists = occurrenceRepository.existsStartedByGroupId(id);
+                assertFalse(exists, "The losing request must pass the real precheck");
+                occurrenceRepository.save(winningOccurrence);
+                return exists;
+            }
+
+            @Override
+            public void save(SessionOccurrence occurrence) {
+                calls[1]++;
+                occurrenceRepository.save(occurrence);
+            }
+        };
+        MockMvc racing = startMvc(racingRepository);
+
+        assertAll(
+                () -> racing.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/start",
+                                group.id().value(), session.id())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requesterId\":\"%s\"}".formatted(admin.value())))
+                        .andExpect(status().isConflict())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(content().json(expectedProblem, JsonCompareMode.STRICT)),
+                () -> assertEquals(1, calls[0]),
+                () -> assertEquals(1, calls[1]),
+                () -> assertEquals(1L, countActiveOccurrences(group.id())));
+    }
+
+    private MockMvc startMvc(SessionOccurrenceRepository occurrences) {
+        return MockMvcBuilders.standaloneSetup(new GroupController(
+                mock(CreateGroupUseCase.class),
+                mock(CreateSessionUseCase.class),
+                mock(GetGroupSessionsUseCase.class),
+                new StartSessionUseCase(groupRepository, occurrences))).build();
+    }
+
+    private static boolean hasCause(Throwable failure, Class<? extends Throwable> type) {
+        for (Throwable cause = failure.getCause(); cause != null; cause = cause.getCause()) {
+            if (type.isInstance(cause)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<Boolean> saveConcurrently(List<SessionOccurrence> occurrences) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(occurrences.size());
         CountDownLatch ready = new CountDownLatch(occurrences.size());
@@ -167,7 +296,9 @@ class MongoSessionOccurrenceRepositoryTest {
                         try {
                             occurrenceRepository.save(occurrence);
                             return true;
-                        } catch (DuplicateKeyException exception) {
+                        } catch (IllegalStateException exception) {
+                            assertTrue(hasCause(exception, DuplicateKeyException.class),
+                                    "Only Mongo active-index conflicts may be rejected");
                             return false;
                         }
                     }))
