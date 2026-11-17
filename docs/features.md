@@ -34,8 +34,9 @@ Règles :
 
 Règles :
 - Il faut qu'une séance soit en cours pourqu'un utilisateur puisse y ajouter des rounds
-- Un round doit avoir un numéros pour l'identifier
-- Un round doit avoir un ou plusieurs combats
+- Un round doit avoir un numéros pour l'identifier (commence par 1 et s'autoincrémente au fur et à mésure)
+- Un round doit avoir un ou plusieurs combats au moment de sa création
+- Un utilisateur peut ajouter autant de combat qu'il veut dans un round tant qu'il y a encore de membre non assigné à un combat
 - Un combat doit avoir exactement 2 membres
 - Un membre ne doit figurer que dans un seul combat pour un round donné
 - Un combat doit avoir un membre gagnant ou non
@@ -51,3 +52,8 @@ Règles :
 Règles sur le calcul des merguez (points) :
 - À la fin d'une séance, le score net d'un membre est son nombre de victoires moins son nombre de défaites.
 - Un point net positif représente des merguez à recevoir ; un point net négatif représente des merguez à payer. Les transactions doivent solder exactement ces positions, conserver la somme totale des soldes et minimiser le nombre de paiements lorsque c'est possible.
+
+
+
+### NEXT
+- proposition de combats à la création d'un round/début de séance
