@@ -6,6 +6,10 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -28,6 +32,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,18 +48,25 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import mg.msys.merguez_api.group.application.command.AddRoundCommand;
+import mg.msys.merguez_api.group.application.command.AddCombatCommand;
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
+import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
+import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
 import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
+import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
+import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
@@ -76,6 +88,12 @@ class GroupControllerTest {
 
     @MockitoBean
     private StartSessionUseCase startSessionUseCase;
+
+    @MockitoBean
+    private AddRoundUseCase addRoundUseCase;
+
+    @MockitoBean
+    private AddCombatUseCase addCombatUseCase;
 
     @Test
     @DisplayName("POST a scheduled session start forwards its identifiers and returns the recorded occurrence")
@@ -105,6 +123,496 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.startedAt").value(startedAt.toString()));
 
         verify(startSessionUseCase).execute(new StartSessionCommand(groupId, requester, scheduledSessionId));
+    }
+
+    @Test
+    @DisplayName("POST an initial round forwards its combat and winner and returns the assigned number")
+    void createInitialRoundForwardsCombatAndWinnerAndReturnsAssignedRound() throws Exception {
+        GroupId groupId = GroupId.random();
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        List<Combat> combats = List.of(
+                new Combat(List.of(firstMember, secondMember), Optional.of(firstMember)));
+        Round round = new Round(
+                new SessionOccurrence(groupId, UUID.randomUUID(), Instant.parse("2026-11-16T21:13:53Z")),
+                1,
+                combats);
+        when(addRoundUseCase.execute(any(AddRoundCommand.class))).thenReturn(round);
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "combats": [
+                    {
+                      "participantIds": ["%s", "%s"],
+                      "winnerId": "%s"
+                    }
+                  ]
+                }
+                """.formatted(requester.value(), firstMember.value(), secondMember.value(), firstMember.value());
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.number").value(1))
+                .andExpect(jsonPath("$.combats.length()").value(1))
+                .andExpect(jsonPath("$.combats[0].participantIds[0]").value(firstMember.value().toString()))
+                .andExpect(jsonPath("$.combats[0].participantIds[1]").value(secondMember.value().toString()))
+                .andExpect(jsonPath("$.combats[0].winnerId").value(firstMember.value().toString()));
+
+        verify(addRoundUseCase).execute(new AddRoundCommand(groupId, requester, combats));
+    }
+
+    @Test
+    @DisplayName("POST an additional combat forwards its round and returns the updated round")
+    void addCombatToExistingRoundForwardsRequestAndReturnsUpdatedRound() throws Exception {
+        GroupId groupId = GroupId.random();
+        int roundNumber = 2;
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId existingFirstMember = new UserId(UUID.randomUUID());
+        UserId existingSecondMember = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        List<Combat> combats = List.of(
+                new Combat(List.of(existingFirstMember, existingSecondMember), Optional.of(existingFirstMember)),
+                new Combat(List.of(firstMember, secondMember), Optional.empty()));
+        Round updatedRound = new Round(
+                new SessionOccurrence(groupId, UUID.randomUUID(), Instant.parse("2026-11-16T21:13:53Z")),
+                roundNumber,
+                combats);
+        when(addCombatUseCase.execute(any(AddCombatCommand.class))).thenReturn(updatedRound);
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": ["%s", "%s"]
+                }
+                """.formatted(requester.value(), firstMember.value(), secondMember.value());
+
+        mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                        groupId.value(),
+                        roundNumber)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.number").value(roundNumber))
+                .andExpect(jsonPath("$.combats.length()").value(2))
+                .andExpect(jsonPath("$.combats[0].participantIds[0]")
+                        .value(existingFirstMember.value().toString()))
+                .andExpect(jsonPath("$.combats[0].participantIds[1]")
+                        .value(existingSecondMember.value().toString()))
+                .andExpect(jsonPath("$.combats[0].winnerId").value(existingFirstMember.value().toString()))
+                .andExpect(jsonPath("$.combats[1].participantIds[0]").value(firstMember.value().toString()))
+                .andExpect(jsonPath("$.combats[1].participantIds[1]").value(secondMember.value().toString()))
+                .andExpect(jsonPath("$.combats[1].winnerId").value(is((Object) null)));
+
+        verify(addCombatUseCase).execute(new AddCombatCommand(
+                groupId,
+                requester,
+                roundNumber,
+                new Combat(List.of(firstMember, secondMember), Optional.empty())));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("roundRefusalCauses")
+    @DisplayName("POST a refused round operation returns a safe ProblemDetail")
+    void createRoundRefusedForInactiveOccurrenceDoesNotExposeExceptionDetails(
+            String exceptionType, int expectedStatus) throws Exception {
+        GroupId groupId = GroupId.random();
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        String sensitiveDetail = "private inactive occurrence diagnostic";
+        RuntimeException cause = exceptionType.equals("IllegalStateException")
+                ? new IllegalStateException(sensitiveDetail)
+                : new IllegalArgumentException(sensitiveDetail);
+        when(addRoundUseCase.execute(any(AddRoundCommand.class)))
+                .thenThrow(new RoundOperationRefusedException(cause));
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "combats": [
+                    {
+                      "participantIds": ["%s", "%s"]
+                    }
+                  ]
+                }
+                """.formatted(requester.value(), firstMember.value(), secondMember.value());
+
+        var result = mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().is(expectedStatus))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(expectedStatus))
+                .andExpect(jsonPath("$.detail").value("The round request was refused."))
+                .andReturn();
+
+        assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
+        assertFalse(result.getResponse().getContentAsString().contains(sensitiveDetail));
+        verify(addRoundUseCase).execute(new AddRoundCommand(
+                groupId,
+                requester,
+                List.of(new Combat(List.of(firstMember, secondMember), Optional.empty()))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("roundRefusalCauses")
+    @DisplayName("POST an additional combat refused by the application returns a safe ProblemDetail")
+    void addCombatRefusedForInvalidCompositionDoesNotExposeExceptionDetails(
+            String exceptionType, int expectedStatus) throws Exception {
+        GroupId groupId = GroupId.random();
+        int roundNumber = 2;
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId firstMember = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        String sensitiveDetail = "private invalid combat diagnostic";
+        RuntimeException cause = exceptionType.equals("IllegalStateException")
+                ? new IllegalStateException(sensitiveDetail)
+                : new IllegalArgumentException(sensitiveDetail);
+        when(addCombatUseCase.execute(any(AddCombatCommand.class)))
+                .thenThrow(new RoundOperationRefusedException(cause));
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": ["%s", "%s"]
+                }
+                """.formatted(requester.value(), firstMember.value(), secondMember.value());
+
+        var result = mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                        groupId.value(),
+                        roundNumber)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().is(expectedStatus))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(expectedStatus))
+                .andExpect(jsonPath("$.detail").value("The round request was refused."))
+                .andReturn();
+
+        assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
+        assertFalse(result.getResponse().getContentAsString().contains(sensitiveDetail));
+        verify(addCombatUseCase).execute(new AddCombatCommand(
+                groupId,
+                requester,
+                roundNumber,
+                new Combat(List.of(firstMember, secondMember), Optional.empty())));
+    }
+
+    static Stream<Arguments> roundRefusalCauses() {
+        return Stream.of(
+                Arguments.of("IllegalStateException", 409),
+                Arguments.of("IllegalArgumentException", 400));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("technicalRoundOperationFailures")
+    @DisplayName("POST a round propagates a raw technical exception")
+    void createRoundPropagatesTechnicalException(String exceptionType, RuntimeException technicalFailure)
+            throws Exception {
+        GroupId groupId = GroupId.random();
+        when(addRoundUseCase.execute(any(AddRoundCommand.class))).thenThrow(technicalFailure);
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "combats": [
+                    {
+                      "participantIds": ["%s", "%s"]
+                    }
+                  ]
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+
+        ServletException servletException = assertThrows(
+                ServletException.class,
+                () -> mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", groupId.value())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody)));
+
+        assertSame(technicalFailure, servletException.getCause());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("technicalRoundOperationFailures")
+    @DisplayName("POST an additional combat propagates a raw technical exception")
+    void addCombatPropagatesTechnicalException(String exceptionType, RuntimeException technicalFailure)
+            throws Exception {
+        GroupId groupId = GroupId.random();
+        int roundNumber = 2;
+        when(addCombatUseCase.execute(any(AddCombatCommand.class))).thenThrow(technicalFailure);
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": ["%s", "%s"]
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+
+        ServletException servletException = assertThrows(
+                ServletException.class,
+                () -> mockMvc.perform(post(
+                                "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                                groupId.value(),
+                                roundNumber)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody)));
+
+        assertSame(technicalFailure, servletException.getCause());
+    }
+
+    static Stream<Arguments> technicalRoundOperationFailures() {
+        return Stream.of(
+                Arguments.of("IllegalStateException", new IllegalStateException("database connection lost")),
+                Arguments.of("IllegalArgumentException", new IllegalArgumentException("corrupt persistence data")));
+    }
+
+    @Test
+    @DisplayName("POST a round denied by the use case returns 403")
+    void createRoundDeniedForNonMemberReturnsForbidden() throws Exception {
+        GroupId groupId = GroupId.random();
+        String sensitiveDetail = "sensitive internal access details";
+        when(addRoundUseCase.execute(any(AddRoundCommand.class)))
+                .thenThrow(new GroupAccessDeniedException(sensitiveDetail));
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "combats": [
+                    {
+                      "participantIds": ["%s", "%s"]
+                    }
+                  ]
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(content().string(not(containsString(sensitiveDetail))));
+    }
+
+    @Test
+    @DisplayName("POST an additional combat denied by the use case returns 403")
+    void addCombatDeniedForNonMemberReturnsForbidden() throws Exception {
+        GroupId groupId = GroupId.random();
+        int roundNumber = 2;
+        String sensitiveDetail = "sensitive internal access details";
+        when(addCombatUseCase.execute(any(AddCombatCommand.class)))
+                .thenThrow(new GroupAccessDeniedException(sensitiveDetail));
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": ["%s", "%s"]
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+
+        mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                        groupId.value(),
+                        roundNumber)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(content().string(not(containsString(sensitiveDetail))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidCreateRoundRequests")
+    @DisplayName("POST a round with invalid combat structure returns 400 without executing the use case")
+    void createRoundWithInvalidCombatStructureReturnsBadRequest(String caseName, String combatFields)
+            throws Exception {
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  %s
+                }
+                """.formatted(UUID.randomUUID(), combatFields);
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", UUID.randomUUID())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400));
+
+        verifyNoInteractions(addRoundUseCase);
+    }
+
+    @Test
+    @DisplayName("POST a round with a winner who is not a participant returns 400")
+    void createRoundWithWinnerOutsideParticipantsReturnsBadRequest() throws Exception {
+        UUID groupId = UUID.randomUUID();
+        UUID firstParticipant = UUID.randomUUID();
+        UUID secondParticipant = UUID.randomUUID();
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "combats": [
+                    {
+                      "participantIds": ["%s", "%s"],
+                      "winnerId": "%s"
+                    }
+                  ]
+                }
+                """.formatted(UUID.randomUUID(), firstParticipant, secondParticipant, UUID.randomUUID());
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", groupId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+
+        verifyNoInteractions(addRoundUseCase);
+    }
+
+    static Stream<Arguments> invalidCreateRoundRequests() {
+        return Stream.of(
+                Arguments.of("empty combats", "\"combats\": []"),
+                Arguments.of("null combats", "\"combats\": null"),
+                Arguments.of("malformed combats list", "\"combats\": {}"),
+                Arguments.of("empty participants", "\"combats\": [{\"participantIds\": []}]"),
+                Arguments.of("null participants", "\"combats\": [{\"participantIds\": null}]"),
+                Arguments.of("malformed participants list", "\"combats\": [{\"participantIds\": {}}]"),
+                Arguments.of("null participant", "\"combats\": [{\"participantIds\": [null, \"%s\"]}]"
+                        .formatted(UUID.randomUUID())),
+                Arguments.of("one participant", "\"combats\": [{\"participantIds\": [\"%s\"]}]"
+                        .formatted(UUID.randomUUID())),
+                Arguments.of("three participants",
+                        "\"combats\": [{\"participantIds\": [\"%s\", \"%s\", \"%s\"]}]"
+                                .formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidAddCombatRequests")
+    @DisplayName("POST an additional combat with invalid participants returns 400 without executing the use case")
+    void addCombatWithInvalidParticipantsReturnsBadRequest(String caseName, String participantIds)
+            throws Exception {
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": %s
+                }
+                """.formatted(UUID.randomUUID(), participantIds);
+
+        mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                        UUID.randomUUID(),
+                        1)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400));
+
+        verifyNoInteractions(addCombatUseCase);
+    }
+
+    @Test
+    @DisplayName("POST an additional combat with a winner who is not a participant returns 400")
+    void addCombatWithWinnerOutsideParticipantsReturnsBadRequest() throws Exception {
+        UUID groupId = UUID.randomUUID();
+        UUID firstParticipant = UUID.randomUUID();
+        UUID secondParticipant = UUID.randomUUID();
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": ["%s", "%s"],
+                  "winnerId": "%s"
+                }
+                """.formatted(UUID.randomUUID(), firstParticipant, secondParticipant, UUID.randomUUID());
+
+        mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                        groupId,
+                        1)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+
+        verifyNoInteractions(addCombatUseCase);
+    }
+
+    static Stream<Arguments> invalidAddCombatRequests() {
+        return Stream.of(
+                Arguments.of("empty participants", "[]"),
+                Arguments.of("null participants", "null"),
+                Arguments.of("malformed participants list", "{}"),
+                Arguments.of("null participant", "[null, \"%s\"]".formatted(UUID.randomUUID())),
+                Arguments.of("one participant", "[\"%s\"]".formatted(UUID.randomUUID())),
+                Arguments.of("three participants",
+                        "[\"%s\", \"%s\", \"%s\"]"
+                                .formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())));
+    }
+
+    @Test
+    @DisplayName("POST a round with duplicate participants returns a safe ProblemDetail")
+    void createRoundWithDuplicateParticipantsReturnsSafeProblemDetail() throws Exception {
+        UUID groupId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "combats": [
+                    {
+                      "participantIds": ["%s", "%s"]
+                    }
+                  ]
+                }
+                """.formatted(requesterId, participantId, participantId);
+
+        var result = mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", groupId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().is4xxClientError())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").exists())
+                .andExpect(jsonPath("$.detail").exists())
+                .andReturn();
+
+        assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
+        assertFalse(result.getResponse().getContentAsString()
+                .contains("A combat must have exactly two distinct participants"));
+        verifyNoInteractions(addRoundUseCase);
+    }
+
+    @Test
+    @DisplayName("POST an additional combat with duplicate participants returns a safe ProblemDetail")
+    void addCombatWithDuplicateParticipantsReturnsSafeProblemDetail() throws Exception {
+        UUID groupId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": ["%s", "%s"]
+                }
+                """.formatted(requesterId, participantId, participantId);
+
+        var result = mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                        groupId,
+                        1)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().is4xxClientError())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").exists())
+                .andExpect(jsonPath("$.detail").exists())
+                .andReturn();
+
+        assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
+        assertFalse(result.getResponse().getContentAsString()
+                .contains("A combat must have exactly two distinct participants"));
+        verifyNoInteractions(addCombatUseCase);
     }
 
     @Test

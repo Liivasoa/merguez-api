@@ -22,7 +22,7 @@ import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
             def = "{ 'groupId': 1, 'startedAt': -1 }")
 })
 record SessionOccurrenceDocument(
-        @Id String id, String groupId, String scheduleId, String status, Date startedAt) {
+        @Id String id, String groupId, String scheduleId, String status, Date startedAt, String startedAtExact) {
 
     static final String IN_PROGRESS_STATUS = "IN_PROGRESS";
 
@@ -32,6 +32,7 @@ record SessionOccurrenceDocument(
                 occurrence.groupId().value().toString(),
                 occurrence.scheduleId().toString(),
                 IN_PROGRESS_STATUS,
-                Date.from(occurrence.startedAt()));
+                Date.from(occurrence.startedAt()),
+                occurrence.startedAt().toString());
     }
 }
