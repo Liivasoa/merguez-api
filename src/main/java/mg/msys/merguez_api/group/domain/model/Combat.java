@@ -14,5 +14,8 @@ public record Combat(List<UserId> participants, Optional<UserId> winner) {
         if (participants.size() != 2 || participants.get(0).equals(participants.get(1))) {
             throw new IllegalArgumentException("A combat must have exactly two distinct participants");
         }
+        if (winner.isPresent() && !participants.contains(winner.get())) {
+            throw new IllegalArgumentException("Combat winner must be one of its participants");
+        }
     }
 }

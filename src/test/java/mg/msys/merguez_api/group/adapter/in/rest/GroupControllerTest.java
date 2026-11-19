@@ -445,6 +445,33 @@ class GroupControllerTest {
         verifyNoInteractions(addRoundUseCase);
     }
 
+    @Test
+    @DisplayName("POST a round with a winner who is not a participant returns 400")
+    void createRoundWithWinnerOutsideParticipantsReturnsBadRequest() throws Exception {
+        UUID groupId = UUID.randomUUID();
+        UUID firstParticipant = UUID.randomUUID();
+        UUID secondParticipant = UUID.randomUUID();
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "combats": [
+                    {
+                      "participantIds": ["%s", "%s"],
+                      "winnerId": "%s"
+                    }
+                  ]
+                }
+                """.formatted(UUID.randomUUID(), firstParticipant, secondParticipant, UUID.randomUUID());
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds", groupId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+
+        verifyNoInteractions(addRoundUseCase);
+    }
+
     static Stream<Arguments> invalidCreateRoundRequests() {
         return Stream.of(
                 Arguments.of("empty combats", "\"combats\": []"),
@@ -482,6 +509,32 @@ class GroupControllerTest {
                 .content(requestBody))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400));
+
+        verifyNoInteractions(addCombatUseCase);
+    }
+
+    @Test
+    @DisplayName("POST an additional combat with a winner who is not a participant returns 400")
+    void addCombatWithWinnerOutsideParticipantsReturnsBadRequest() throws Exception {
+        UUID groupId = UUID.randomUUID();
+        UUID firstParticipant = UUID.randomUUID();
+        UUID secondParticipant = UUID.randomUUID();
+        String requestBody = """
+                {
+                  "requesterId": "%s",
+                  "participantIds": ["%s", "%s"],
+                  "winnerId": "%s"
+                }
+                """.formatted(UUID.randomUUID(), firstParticipant, secondParticipant, UUID.randomUUID());
+
+        mockMvc.perform(post(
+                        "/api/v1/groups/{groupId}/rounds/{roundNumber}/combats",
+                        groupId,
+                        1)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
 
         verifyNoInteractions(addCombatUseCase);

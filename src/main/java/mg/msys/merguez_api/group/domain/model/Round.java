@@ -1,7 +1,11 @@
 package mg.msys.merguez_api.group.domain.model;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+
+import mg.msys.merguez_api.user.domain.model.UserId;
 
 public record Round(SessionOccurrence occurrence, int number, List<Combat> combats) {
 
@@ -13,6 +17,12 @@ public record Round(SessionOccurrence occurrence, int number, List<Combat> comba
         combats = List.copyOf(Objects.requireNonNull(combats, "Round combats are required"));
         if (combats.isEmpty()) {
             throw new IllegalArgumentException("A round must contain at least one combat");
+        }
+        Set<UserId> assignedParticipants = new HashSet<>();
+        for (Combat combat : combats) {
+            if (combat.participants().stream().anyMatch(participant -> !assignedParticipants.add(participant))) {
+                throw new IllegalArgumentException("A participant can appear in only one combat per round");
+            }
         }
     }
 

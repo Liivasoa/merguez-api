@@ -1,6 +1,7 @@
 package mg.msys.merguez_api.group.domain.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -14,6 +15,18 @@ import org.junit.jupiter.api.Test;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddCombatWinnerTest {
+
+    @Test
+    @DisplayName("A combat winner must be one of its participants")
+    void combatWinnerMustBeParticipant() {
+        UserId firstMember = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        UserId unrelatedMember = new UserId(UUID.randomUUID());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new Combat(List.of(firstMember, secondMember), Optional.of(unrelatedMember)));
+    }
 
     @Test
     @DisplayName("A group member adds a combat with its chosen winner to a round")

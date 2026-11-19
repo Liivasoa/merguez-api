@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +16,22 @@ import org.junit.jupiter.api.Test;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddCombatUniquenessTest {
+
+    @Test
+    @DisplayName("A round cannot assign a participant to more than one combat")
+    void roundCannotContainOverlappingCombatParticipants() {
+        UserId firstMember = new UserId(UUID.randomUUID());
+        UserId secondMember = new UserId(UUID.randomUUID());
+        UserId thirdMember = new UserId(UUID.randomUUID());
+        GroupId groupId = GroupId.random();
+        SessionOccurrence occurrence =
+                new SessionOccurrence(groupId, UUID.randomUUID(), Instant.now());
+        List<Combat> combats = List.of(
+                new Combat(List.of(firstMember, secondMember), Optional.empty()),
+                new Combat(List.of(firstMember, thirdMember), Optional.empty()));
+
+        assertThrows(IllegalArgumentException.class, () -> new Round(occurrence, 1, combats));
+    }
 
     @Test
     @DisplayName("A group member cannot add a combat with a participant already assigned in the round")

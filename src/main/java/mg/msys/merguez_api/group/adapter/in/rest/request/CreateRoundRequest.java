@@ -36,6 +36,12 @@ public record CreateRoundRequest(
             return participantIds == null || participantIds.stream().distinct().count() == participantIds.size();
         }
 
+        @JsonIgnore
+        @AssertTrue
+        boolean isWinnerParticipant() {
+            return winnerId == null || participantIds == null || participantIds.contains(winnerId);
+        }
+
         private Combat toCombat() {
             return new Combat(
                     participantIds.stream().map(UserId::new).toList(),

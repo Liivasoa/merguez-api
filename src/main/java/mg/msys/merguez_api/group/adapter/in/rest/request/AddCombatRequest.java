@@ -24,6 +24,12 @@ public record AddCombatRequest(
         return participantIds == null || participantIds.stream().distinct().count() == participantIds.size();
     }
 
+    @JsonIgnore
+    @AssertTrue
+    boolean isWinnerParticipant() {
+        return winnerId == null || participantIds == null || participantIds.contains(winnerId);
+    }
+
     public AddCombatCommand toCommand(GroupId groupId, int roundNumber) {
         return new AddCombatCommand(
                 groupId,
