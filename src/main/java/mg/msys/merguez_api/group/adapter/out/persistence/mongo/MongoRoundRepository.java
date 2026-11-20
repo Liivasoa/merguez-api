@@ -77,7 +77,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
         }
     }
 
-    private static Document occurrenceFilter(SessionOccurrence occurrence) {
+    static Document occurrenceFilter(SessionOccurrence occurrence) {
         Document filter = activeOccurrenceFilter(occurrence.groupId())
                 .append("scheduleId", occurrence.scheduleId().toString())
                 .append("startedAt", Date.from(occurrence.startedAt()));
