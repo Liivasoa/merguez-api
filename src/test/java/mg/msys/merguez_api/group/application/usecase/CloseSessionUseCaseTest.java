@@ -7,11 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -26,17 +28,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
+import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.Round;
+import mg.msys.merguez_api.group.domain.model.RoundStatus;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionClosureResult;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
@@ -85,8 +90,110 @@ class CloseSessionUseCaseTest {
         order.verify(fixture.logger).log(any(), any());
     }
 
+    @Test
+    void propagatesDomainRefusalWhenNoOccurrenceIsActive() {
+        RefusalFixture fixture = new RefusalFixture();
+        GroupRepository groups = mock(GroupRepository.class);
+        when(fixture.loader.loadByGroupId(fixture.group.id())).thenReturn(Optional.empty());
+        when(groups.findById(fixture.group.id())).thenReturn(Optional.of(fixture.group));
+        CloseSessionUseCase useCase = new CloseSessionUseCase(
+                fixture.loader, groups, fixture.persistence, fixture.logger);
+        var sessions = fixture.group.sessions();
+        var members = fixture.group.members();
+        assertTrue(fixture.group.activeOccurrences().isEmpty());
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> useCase.execute(new CloseSessionCommand(fixture.group.id(), fixture.admin)));
+
+        assertSame(fixture.domainFailure.get(), thrown);
+        assertEquals("Session occurrence must be in progress", thrown.getMessage());
+        verify(fixture.loader).loadByGroupId(fixture.group.id());
+        verify(groups).findById(fixture.group.id());
+        verify(fixture.group).closeSession(fixture.admin, null);
+        assertTrue(fixture.group.activeOccurrences().isEmpty());
+        assertEquals(sessions, fixture.group.sessions());
+        assertEquals(members, fixture.group.members());
+        verifyNoInteractions(fixture.persistence, fixture.logger);
+    }
+
+    @Test
+    void propagatesDomainRefusalForActiveOccurrenceWithoutRounds() {
+        RefusalFixture fixture = new RefusalFixture();
+        SessionOccurrence occurrence = fixture.group.startSession(fixture.admin, fixture.session);
+        fixture.loadActiveGroup();
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, fixture::close);
+
+        assertSame(fixture.domainFailure.get(), thrown);
+        assertEquals("A session must contain at least one round", thrown.getMessage());
+        verify(fixture.group).closeSession(fixture.admin, occurrence);
+        assertTrue(occurrence.isStarted());
+        assertFalse(occurrence.isClosed());
+        assertEquals(List.of(occurrence), fixture.group.activeOccurrences());
+        assertTrue(fixture.group.rounds(occurrence).isEmpty());
+        verifyNoInteractions(fixture.persistence, fixture.logger);
+    }
+
+    @Test
+    void propagatesDomainRefusalWhenAnyRoundIsStillOpen() {
+        RefusalFixture fixture = new RefusalFixture();
+        SessionOccurrence occurrence = fixture.group.startSession(fixture.admin, fixture.session);
+        Combat combat = new Combat(List.of(fixture.admin, fixture.member), Optional.empty());
+        Round firstRound = fixture.group.addRound(fixture.admin, occurrence, List.of(combat));
+        Combat result = new Combat(combat.participants(), Optional.of(fixture.admin));
+        Round closedRound = fixture.group.closeRound(fixture.admin, firstRound, List.of(result));
+        Round openRound = fixture.group.addRound(fixture.admin, occurrence, List.of(combat));
+        fixture.loadActiveGroup();
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, fixture::close);
+
+        assertSame(fixture.domainFailure.get(), thrown);
+        assertEquals("All rounds must be closed before closing the session", thrown.getMessage());
+        verify(fixture.group).closeSession(fixture.admin, occurrence);
+        assertTrue(occurrence.isStarted());
+        assertFalse(occurrence.isClosed());
+        assertEquals(List.of(occurrence), fixture.group.activeOccurrences());
+        assertEquals(List.of(closedRound, openRound), fixture.group.rounds(occurrence));
+        assertEquals(RoundStatus.CLOSED, closedRound.status());
+        assertEquals(List.of(result), closedRound.combats());
+        assertEquals(RoundStatus.IN_PROGRESS, openRound.status());
+        assertEquals(List.of(combat), openRound.combats());
+        verifyNoInteractions(fixture.persistence, fixture.logger);
+    }
+
     private static UserId userId() {
         return new UserId(UUID.randomUUID());
+    }
+
+    private static final class RefusalFixture {
+        final UserId admin = userId();
+        final UserId member = userId();
+        final Group group = spy(Group.create("Training", admin, List.of(member)));
+        final Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        final LoadGroupWithActiveOccurrencePort loader = mock(LoadGroupWithActiveOccurrencePort.class);
+        final SaveClosedSessionOccurrencePort persistence = mock(SaveClosedSessionOccurrencePort.class);
+        final LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        final AtomicReference<RuntimeException> domainFailure = new AtomicReference<>();
+        final CloseSessionUseCase useCase = new CloseSessionUseCase(loader, persistence, logger);
+
+        RefusalFixture() {
+            doAnswer(invocation -> {
+                try {
+                    return invocation.callRealMethod();
+                } catch (RuntimeException failure) {
+                    domainFailure.set(failure);
+                    throw failure;
+                }
+            }).when(group).closeSession(any(), nullable(SessionOccurrence.class));
+        }
+
+        void loadActiveGroup() {
+            when(loader.loadByGroupId(group.id())).thenReturn(Optional.of(group));
+        }
+
+        SessionClosureResult close() {
+            return useCase.execute(new CloseSessionCommand(group.id(), admin));
+        }
     }
 
     private static final class Fixture {
