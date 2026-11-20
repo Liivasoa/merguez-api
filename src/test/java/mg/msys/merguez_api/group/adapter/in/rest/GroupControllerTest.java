@@ -117,7 +117,7 @@ class GroupControllerTest {
     private CloseSessionUseCase closeSessionUseCase;
 
     @ParameterizedTest(name = "{0}")
-    @ValueSource(strings = {"save", "log", "load"})
+    @ValueSource(strings = {"save", "log", "load", "empty snapshot", "other occurrence snapshot"})
     void closeSessionPropagatesTechnicalFailureFromPortWithoutConflict(String failingPort) throws Exception {
         UserId admin = new UserId(UUID.randomUUID());
         UserId member = new UserId(UUID.randomUUID());
@@ -134,7 +134,8 @@ class GroupControllerTest {
         when(loader.loadByGroupId(group.id())).thenReturn(Optional.of(group));
         IllegalStateException failure = new IllegalStateException("technical " + failingPort + " failure");
         switch (failingPort) {
-            case "save" -> doThrow(failure).when(saver).save(any(), any());
+            case "save", "empty snapshot", "other occurrence snapshot" ->
+                    doThrow(failure).when(saver).save(any(), any());
             case "log" -> doThrow(failure).when(logger).log(any(), any());
             case "load" -> when(loader.loadByGroupId(group.id())).thenThrow(failure);
             default -> throw new AssertionError(failingPort);

@@ -5,6 +5,11 @@ import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -17,9 +22,13 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
+import jakarta.servlet.ServletException;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -104,6 +113,67 @@ class CloseSessionMongoIntegrationTest {
                 .find(new Document("groupId", group.id().value().toString())).first();
         assertNotNull(stored);
         assertEquals("CLOSED", stored.getString("status"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"rounds", "inactive"})
+    void concurrentMongoChangeReturnsGenericConflictWithoutLogging(String change) {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = new SessionOccurrence(
+                group.id(), session.id(), Instant.parse("2026-11-16T21:13:53Z"));
+        groups.save(group);
+        occurrences.save(occurrence);
+        Round initial = new Round(occurrence, 1, RoundStatus.CLOSED,
+                List.of(new Combat(List.of(admin, member), Optional.of(admin))));
+        rounds.create(initial);
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        Document filter = new Document("groupId", group.id().value().toString());
+        AtomicReference<Document> concurrentDocument = new AtomicReference<>();
+        AtomicReference<RuntimeException> saveFailure = new AtomicReference<>();
+        doAnswer(invocation -> {
+            SessionOccurrence closed = invocation.getArgument(0);
+            List<Round> snapshot = invocation.getArgument(1);
+            assertTrue(closed.isClosed());
+            assertEquals(List.of(initial), snapshot);
+            Document changed = change.equals("rounds")
+                    ? new Document("rounds.1.combats.0.winner", member.value().toString())
+                    : new Document("status", "CLOSED");
+            assertEquals(1L, collection.updateOne(filter, new Document("$set", changed)).getModifiedCount());
+            concurrentDocument.set(collection.find(filter).first());
+            try {
+                return invocation.callRealMethod();
+            } catch (RuntimeException failure) {
+                saveFailure.set(failure);
+                throw failure;
+            }
+        }).when(closedOccurrenceSaver).save(any(), anyList());
+
+        assertAll(
+                () -> {
+                    try {
+                        MockMvcBuilders.webAppContextSetup(context).build()
+                                .perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
+                                                group.id().value(), session.id())
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"requesterId\":\"%s\"}".formatted(member.value())))
+                                .andExpect(status().isConflict())
+                                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                                .andExpect(jsonPath("$.status").value(409))
+                                .andExpect(jsonPath("$.detail").value("The session closure request was refused."))
+                                .andExpect(content().string(not(containsString(
+                                        "Session closure conflicts with changed rounds or active occurrence"))));
+                    } catch (ServletException failure) {
+                        throw new AssertionError("Expected HTTP 409, but the save exception propagated", failure);
+                    }
+                },
+                () -> assertNotNull(saveFailure.get(), "The real Mongo save must reject the stale snapshot"),
+                () -> assertNotNull(concurrentDocument.get()),
+                () -> assertEquals(concurrentDocument.get(), collection.find(filter).first()),
+                () -> verify(closedOccurrenceSaver).save(any(), anyList()),
+                () -> verifyNoInteractions(closureLogger));
     }
 
     @Test

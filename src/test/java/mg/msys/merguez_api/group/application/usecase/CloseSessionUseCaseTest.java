@@ -41,6 +41,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InOrder;
 
 import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
+import mg.msys.merguez_api.group.application.exception.SessionClosureConflictException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
@@ -82,6 +83,32 @@ class CloseSessionUseCaseTest {
 
         assertSame(failure, thrown);
         verifyNoInteractions(fixture.logger);
+    }
+
+    @Test
+    void translatesSaveConflictToClosureRefusalWithIdenticalCauseWithoutLogging() {
+        Fixture fixture = new Fixture();
+        SessionClosureConflictException conflict = new SessionClosureConflictException("concurrent change");
+        doThrow(conflict).when(fixture.persistence).save(eq(fixture.occurrence), anyList());
+
+        SessionClosureRefusedException thrown = assertThrows(SessionClosureRefusedException.class,
+                () -> fixture.close(fixture.admin));
+
+        assertSame(conflict, thrown.getCause());
+        verify(fixture.persistence).save(eq(fixture.occurrence), eq(List.of(fixture.closedRound)));
+        verifyNoInteractions(fixture.logger);
+    }
+
+    @Test
+    void doesNotTranslateConflictThrownByLoggerAfterSuccessfulSave() {
+        Fixture fixture = new Fixture();
+        SessionClosureConflictException failure = new SessionClosureConflictException("logger failure");
+        doThrow(failure).when(fixture.logger).log(any(), any());
+
+        assertSame(failure, assertThrows(SessionClosureConflictException.class, () -> fixture.close(fixture.admin)));
+        InOrder order = inOrder(fixture.persistence, fixture.logger);
+        order.verify(fixture.persistence).save(eq(fixture.occurrence), eq(List.of(fixture.closedRound)));
+        order.verify(fixture.logger).log(any(), any());
     }
 
     @ParameterizedTest

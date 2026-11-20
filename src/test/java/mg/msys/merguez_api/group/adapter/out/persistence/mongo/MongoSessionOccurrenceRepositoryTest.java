@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -40,6 +41,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.mongodb.test.autoconfigure.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -67,6 +69,8 @@ import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepositor
 import mg.msys.merguez_api.group.application.command.AddRoundCommand;
 import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
+import mg.msys.merguez_api.group.application.exception.SessionClosureConflictException;
+import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CloseSessionUseCase;
@@ -373,6 +377,57 @@ class MongoSessionOccurrenceRepositoryTest {
         assertClosureRefusesScalarReplacedWithArray(true);
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"rounds", "inactive"})
+    void staleSnapshotOrInactiveOccurrenceRaisesSpecificSaveConflict(String change) {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        Round round = new Round(occurrence, 1, RoundStatus.CLOSED,
+                List.of(new Combat(List.of(admin, member), Optional.of(admin))));
+        roundRepository.save(round);
+        Group loaded = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+        SessionOccurrence loadedOccurrence = loaded.activeOccurrences().getFirst();
+        List<Round> snapshot = loaded.rounds(loadedOccurrence);
+        var closed = loaded.closeSession(admin, loadedOccurrence).occurrence();
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        Document filter = new Document("groupId", group.id().value().toString());
+        Document mutation = change.equals("rounds")
+                ? new Document("rounds.1.combats.0.winner", member.value().toString())
+                : new Document("status", "CLOSED");
+        assertEquals(1L, collection.updateOne(filter, new Document("$set", mutation)).getModifiedCount());
+        Document afterConcurrentWrite = collection.find(filter).first();
+
+        assertThrowsExactly(SessionClosureConflictException.class,
+                () -> closedOccurrenceSaver.save(closed, snapshot));
+        assertNotNull(afterConcurrentWrite);
+        assertEquals(afterConcurrentWrite, collection.find(filter).first());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"empty", "other occurrence"})
+    void invalidClosureSnapshotRemainsIllegalStateRatherThanSaveConflict(String invalid) {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        Round round = group.addRound(admin, occurrence,
+                List.of(new Combat(List.of(admin, member), Optional.empty())));
+        group.closeRound(admin, round, List.of(new Combat(List.of(admin, member), Optional.of(admin))));
+        var closed = group.closeSession(admin, occurrence).occurrence();
+        SessionOccurrence other = new SessionOccurrence(group.id(), session.id(), occurrence.startedAt().plusSeconds(1));
+        List<Round> invalidSnapshot = invalid.equals("empty") ? List.of()
+                : List.of(new Round(other, 1, RoundStatus.CLOSED,
+                        List.of(new Combat(List.of(admin, member), Optional.of(admin)))));
+
+        assertThrowsExactly(IllegalStateException.class, () -> closedOccurrenceSaver.save(closed, invalidSnapshot));
+    }
+
     private void assertClosureRefusesScalarReplacedWithArray(boolean winner) {
         UserId admin = new UserId(UUID.randomUUID());
         UserId member = new UserId(UUID.randomUUID());
@@ -418,8 +473,10 @@ class MongoSessionOccurrenceRepositoryTest {
 
         assertAll(
                 () -> {
-                    RuntimeException conflict = assertThrows(RuntimeException.class, () -> useCase.execute(
+                    SessionClosureRefusedException refusal = assertThrows(SessionClosureRefusedException.class, () -> useCase.execute(
                             new CloseSessionCommand(group.id(), admin, session.id())));
+                    SessionClosureConflictException conflict = assertThrowsExactly(SessionClosureConflictException.class,
+                            () -> { throw refusal.getCause(); });
                     String description = (conflict.getClass().getSimpleName() + " " + conflict.getMessage())
                             .toLowerCase(java.util.Locale.ROOT);
                     assertTrue(description.contains("conflict") || description.contains("changed")
@@ -480,8 +537,10 @@ class MongoSessionOccurrenceRepositoryTest {
 
         assertAll(
                 () -> {
-                    RuntimeException conflict = assertThrows(RuntimeException.class, () -> useCase.execute(
+                    SessionClosureRefusedException refusal = assertThrows(SessionClosureRefusedException.class, () -> useCase.execute(
                             new CloseSessionCommand(group.id(), admin, session.id())));
+                    SessionClosureConflictException conflict = assertThrowsExactly(SessionClosureConflictException.class,
+                            () -> { throw refusal.getCause(); });
                     String description = (conflict.getClass().getSimpleName() + " " + conflict.getMessage())
                             .toLowerCase(java.util.Locale.ROOT);
                     assertTrue(description.contains("conflict") || description.contains("changed")
@@ -569,8 +628,10 @@ class MongoSessionOccurrenceRepositoryTest {
 
         assertAll(
                 () -> {
-                    RuntimeException conflict = assertThrows(RuntimeException.class, () -> useCase.execute(
+                    SessionClosureRefusedException refusal = assertThrows(SessionClosureRefusedException.class, () -> useCase.execute(
                             new CloseSessionCommand(group.id(), admin, session.id())));
+                    SessionClosureConflictException conflict = assertThrowsExactly(SessionClosureConflictException.class,
+                            () -> { throw refusal.getCause(); });
                     String description = (conflict.getClass().getSimpleName() + " " + conflict.getMessage())
                             .toLowerCase(java.util.Locale.ROOT);
                     assertTrue(description.contains("conflict") || description.contains("changed")
