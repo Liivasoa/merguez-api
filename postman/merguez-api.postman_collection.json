@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7b1f2c4e-3a5d-4e8b-9c1a-5e2d0a0f0001",
     "name": "Merguez API",
-    "description": "Importez cette collection dans Postman et ajustez baseUrl si nécessaire. Exécutez Créer un groupe, Créer une session, Lister les sessions du groupe, Démarrer une session, Créer une manche, puis Ajouter un combat à une manche. La création du groupe inclut les quatre personnes nécessaires aux deux combats. Créez un nouveau groupe pour recommencer le parcours.",
+    "description": "Importez cette collection dans Postman et ajustez baseUrl si nécessaire. Exécutez Créer un groupe, Créer une session, Lister les sessions du groupe, Démarrer une session, Créer une manche, Ajouter un combat à une manche, puis Clôturer une manche. La création du groupe inclut six membres, administrateur compris. Créez un nouveau groupe pour recommencer le parcours.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -29,6 +29,16 @@
     {
       "key": "participant3Id",
       "value": "44444444-4444-4444-4444-444444444444",
+      "type": "string"
+    },
+    {
+      "key": "participant4Id",
+      "value": "55555555-5555-5555-5555-555555555555",
+      "type": "string"
+    },
+    {
+      "key": "participant5Id",
+      "value": "66666666-6666-6666-6666-666666666666",
       "type": "string"
     },
     {
@@ -92,7 +102,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"creatorId\": \"{{creatorId}}\",\n  \"name\": \"Séance du samedi\",\n  \"description\": \"Groupe de travail\",\n  \"participantIds\": [\"{{participantId}}\", \"{{participant2Id}}\", \"{{participant3Id}}\"]\n}"
+              "raw": "{\n  \"creatorId\": \"{{creatorId}}\",\n  \"name\": \"Séance du samedi\",\n  \"description\": \"Groupe de travail\",\n  \"participantIds\": [\"{{participantId}}\", \"{{participant2Id}}\", \"{{participant3Id}}\", \"{{participant4Id}}\", \"{{participant5Id}}\"]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/groups",
@@ -638,6 +648,43 @@
                   "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds/{{roundNumber}}/combats",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "v1", "groups", "{{groupId}}", "rounds", "{{roundNumber}}", "combats"]
+                }
+              }
+            },
+            {
+              "name": "Clôturer une manche",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 200 OK', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test('Round is closed with the submitted results', function () {",
+                      "    const round = pm.response.json();",
+                      "    pm.expect(round.number).to.equal(Number(pm.variables.get('roundNumber')));",
+                      "    pm.expect(round.status).to.equal('CLOSED');",
+                      "    pm.expect(round.combats).to.have.lengthOf(2);",
+                      "    pm.expect(round.combats[0].winnerId).to.equal(pm.variables.get('creatorId'));",
+                      "    pm.expect(round.combats[1].winnerId).to.equal(pm.variables.get('participant3Id'));",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/json"}],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{creatorId}}\",\n  \"combats\": [\n    {\"participantIds\": [\"{{creatorId}}\", \"{{participantId}}\"], \"winnerId\": \"{{creatorId}}\"},\n    {\"participantIds\": [\"{{participant2Id}}\", \"{{participant3Id}}\"], \"winnerId\": \"{{participant3Id}}\"}\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds/{{roundNumber}}/close",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "rounds", "{{roundNumber}}", "close"]
                 }
               }
             }

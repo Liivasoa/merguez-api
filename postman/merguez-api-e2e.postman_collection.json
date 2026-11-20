@@ -1,0 +1,218 @@
+{
+  "info": {
+    "_postman_id": "80e93d0d-cff9-4428-9985-87ab1b70e5f1",
+    "name": "Merguez API - E2E happy path",
+    "description": "Exécuter toute la collection dans l'ordre. Chaque exécution crée un nouveau groupe de six membres et le conserve dans la base de données.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8080"},
+    {"key": "creatorId", "value": "11111111-1111-1111-1111-111111111111"},
+    {"key": "participantId", "value": "22222222-2222-2222-2222-222222222222"},
+    {"key": "participant2Id", "value": "33333333-3333-3333-3333-333333333333"},
+    {"key": "participant3Id", "value": "44444444-4444-4444-4444-444444444444"},
+    {"key": "participant4Id", "value": "55555555-5555-5555-5555-555555555555"},
+    {"key": "participant5Id", "value": "66666666-6666-6666-6666-666666666666"},
+    {"key": "groupId", "value": ""},
+    {"key": "sessionId", "value": ""},
+    {"key": "roundNumber", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "1. Créer un groupe de six membres",
+      "event": [
+        {"listen": "prerequest", "script": {"type": "text/javascript", "exec": [
+          "pm.collectionVariables.unset('groupId');",
+          "pm.collectionVariables.unset('sessionId');",
+          "pm.collectionVariables.unset('roundNumber');"
+        ]}},
+        {"listen": "test", "script": {"type": "text/javascript", "exec": [
+          "pm.test('Group created with one admin and five members', function () {",
+          "    pm.response.to.have.status(201);",
+          "    const group = pm.response.json();",
+          "    pm.expect(group.id).to.be.a('string').and.not.empty;",
+          "    pm.expect(pm.response.headers.get('Location')).to.include('/api/v1/groups/' + group.id);",
+          "    pm.expect(group.name).to.equal('E2E training group');",
+          "    pm.expect(group.members).to.have.lengthOf(6);",
+          "    const expected = ['creatorId', 'participantId', 'participant2Id', 'participant3Id', 'participant4Id', 'participant5Id'].map(function (key) { return pm.variables.get(key); });",
+          "    pm.expect(new Set(expected).size).to.equal(6);",
+          "    expected.forEach(function (id, index) {",
+          "        pm.expect(group.members).to.deep.include({userId: id, role: index === 0 ? 'ADMIN' : 'MEMBER'});",
+          "    });",
+          "    pm.collectionVariables.set('groupId', group.id);",
+          "});"
+        ]}}
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\n  \"creatorId\": \"{{creatorId}}\",\n  \"name\": \"E2E training group\",\n  \"description\": \"Complete happy path\",\n  \"participantIds\": [\"{{participantId}}\", \"{{participant2Id}}\", \"{{participant3Id}}\", \"{{participant4Id}}\", \"{{participant5Id}}\"]\n}"},
+        "url": "{{baseUrl}}/api/v1/groups"
+      }
+    },
+    {
+      "name": "2. Créer une session",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Session created', function () { pm.response.to.have.status(204); });"
+      ]}}],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\n  \"requesterId\": \"{{participantId}}\",\n  \"name\": \"E2E training\",\n  \"day\": \"TUESDAY\",\n  \"startTime\": \"14:00\"\n}"},
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions"
+      }
+    },
+    {
+      "name": "3. Lister les sessions",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Created session is listed with its schedule', function () {",
+        "    pm.response.to.have.status(200);",
+        "    const sessions = pm.response.json();",
+        "    pm.expect(sessions).to.have.lengthOf(1);",
+        "    const session = sessions[0];",
+        "    pm.expect(session.groupId).to.equal(pm.variables.get('groupId'));",
+        "    pm.expect(session.id).to.be.a('string').and.not.empty;",
+        "    pm.expect(session.name).to.equal('E2E training');",
+        "    pm.expect(session.day).to.equal('TUESDAY');",
+        "    pm.expect(session.startTime).to.match(/^14:00(?::00)?$/);",
+        "    pm.collectionVariables.set('sessionId', session.id);",
+        "});"
+      ]}}],
+      "request": {"method": "GET", "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions"}
+    },
+    {
+      "name": "4. Démarrer la session",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Started occurrence belongs to the scheduled session', function () {",
+        "    pm.response.to.have.status(200);",
+        "    const occurrence = pm.response.json();",
+        "    pm.expect(occurrence.groupId).to.equal(pm.variables.get('groupId'));",
+        "    pm.expect(occurrence.scheduleId).to.equal(pm.variables.get('sessionId'));",
+        "    pm.expect(occurrence.startedAt).to.be.a('string').and.not.empty;",
+        "});"
+      ]}}],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"requesterId\": \"{{participant2Id}}\"}"},
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/{{sessionId}}/start"
+      }
+    },
+    {
+      "name": "5. Créer la première manche",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('First round contains the initial combat and winner', function () {",
+        "    pm.response.to.have.status(201);",
+        "    const round = pm.response.json();",
+        "    pm.expect(round.number).to.equal(1);",
+        "    pm.expect(round.status).to.equal('IN_PROGRESS');",
+        "    pm.expect(round.combats).to.deep.equal([{participantIds: [pm.variables.get('creatorId'), pm.variables.get('participantId')], winnerId: pm.variables.get('creatorId')}]);",
+        "    pm.collectionVariables.set('roundNumber', round.number);",
+        "});"
+      ]}}],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"requesterId\": \"{{creatorId}}\", \"combats\": [{\"participantIds\": [\"{{creatorId}}\", \"{{participantId}}\"], \"winnerId\": \"{{creatorId}}\"}]}"},
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds"
+      }
+    },
+    {
+      "name": "6. Ajouter le deuxième combat",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Second combat is added without a winner', function () {",
+        "    pm.response.to.have.status(200);",
+        "    const round = pm.response.json();",
+        "    pm.expect(round.number).to.equal(Number(pm.variables.get('roundNumber')));",
+        "    pm.expect(round.status).to.equal('IN_PROGRESS');",
+        "    pm.expect(round.combats).to.have.lengthOf(2);",
+        "    pm.expect(round.combats[1]).to.deep.equal({participantIds: [pm.variables.get('participant2Id'), pm.variables.get('participant3Id')], winnerId: null});",
+        "});"
+      ]}}],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"requesterId\": \"{{participantId}}\", \"participantIds\": [\"{{participant2Id}}\", \"{{participant3Id}}\"]}"},
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds/{{roundNumber}}/combats"
+      }
+    },
+    {
+      "name": "7. Ajouter le troisième combat",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Third combat is added with a winner', function () {",
+        "    pm.response.to.have.status(200);",
+        "    const round = pm.response.json();",
+        "    pm.expect(round.number).to.equal(Number(pm.variables.get('roundNumber')));",
+        "    pm.expect(round.status).to.equal('IN_PROGRESS');",
+        "    pm.expect(round.combats).to.have.lengthOf(3);",
+        "    pm.expect(round.combats[2]).to.deep.equal({participantIds: [pm.variables.get('participant4Id'), pm.variables.get('participant5Id')], winnerId: pm.variables.get('participant5Id')});",
+        "});"
+      ]}}],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"requesterId\": \"{{participant3Id}}\", \"participantIds\": [\"{{participant4Id}}\", \"{{participant5Id}}\"], \"winnerId\": \"{{participant5Id}}\"}"},
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds/{{roundNumber}}/combats"
+      }
+    },
+    {
+      "name": "8. Clôturer la première manche",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Round is closed and all submitted results replace previous winners', function () {",
+        "    pm.response.to.have.status(200);",
+        "    const round = pm.response.json();",
+        "    pm.expect(round.number).to.equal(Number(pm.variables.get('roundNumber')));",
+        "    pm.expect(round.status).to.equal('CLOSED');",
+        "    pm.expect(round.combats).to.deep.equal([",
+        "        {participantIds: [pm.variables.get('creatorId'), pm.variables.get('participantId')], winnerId: pm.variables.get('participantId')},",
+        "        {participantIds: [pm.variables.get('participant2Id'), pm.variables.get('participant3Id')], winnerId: null},",
+        "        {participantIds: [pm.variables.get('participant4Id'), pm.variables.get('participant5Id')], winnerId: pm.variables.get('participant4Id')}",
+        "    ]);",
+        "});"
+      ]}}],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"requesterId\": \"{{participant4Id}}\", \"combats\": [{\"participantIds\": [\"{{participantId}}\", \"{{creatorId}}\"], \"winnerId\": \"{{participantId}}\"}, {\"participantIds\": [\"{{participant2Id}}\", \"{{participant3Id}}\"]}, {\"participantIds\": [\"{{participant4Id}}\", \"{{participant5Id}}\"], \"winnerId\": \"{{participant4Id}}\"}]}"},
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds/{{roundNumber}}/close"
+      }
+    },
+    {
+      "name": "9. Créer une deuxième manche",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('A second round can start after closure', function () {",
+        "    pm.response.to.have.status(201);",
+        "    const round = pm.response.json();",
+        "    pm.expect(round.number).to.equal(2);",
+        "    pm.expect(round.status).to.equal('IN_PROGRESS');",
+        "    pm.expect(round.combats).to.deep.equal([{participantIds: [pm.variables.get('creatorId'), pm.variables.get('participant5Id')], winnerId: null}]);",
+        "    pm.collectionVariables.set('roundNumber', round.number);",
+        "});"
+      ]}}],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"requesterId\": \"{{participant5Id}}\", \"combats\": [{\"participantIds\": [\"{{creatorId}}\", \"{{participant5Id}}\"]}]}"},
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds"
+      }
+    },
+    {
+      "name": "10. Clôturer la deuxième manche",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Second round is closed', function () {",
+        "    pm.response.to.have.status(200);",
+        "    const round = pm.response.json();",
+        "    pm.expect(round.number).to.equal(2);",
+        "    pm.expect(round.status).to.equal('CLOSED');",
+        "    pm.expect(round.combats).to.deep.equal([{participantIds: [pm.variables.get('creatorId'), pm.variables.get('participant5Id')], winnerId: pm.variables.get('creatorId')}]);",
+        "});"
+      ]}}],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"requesterId\": \"{{creatorId}}\", \"combats\": [{\"participantIds\": [\"{{creatorId}}\", \"{{participant5Id}}\"], \"winnerId\": \"{{creatorId}}\"}]}"},
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds/{{roundNumber}}/close"
+      }
+    }
+  ]
+}

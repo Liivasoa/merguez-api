@@ -1,5 +1,19 @@
 # merguez-api
 
+## Postman
+
+Import `postman/merguez-api.postman_collection.json` for individual requests and
+error cases, or `postman/merguez-api-e2e.postman_collection.json` for the
+complete happy path. Start MongoDB and the application, set the collection's
+`baseUrl` if needed, and run the E2E collection in order with the Postman
+Collection Runner (one iteration). Do not override its identifiers with
+environment variables of the same name.
+
+The E2E run creates a group with one administrator and five members, schedules
+and starts a session, then creates and closes two rounds. Each run creates
+and leaves a new group and session data in the configured MongoDB database.
+The API currently has no endpoint for ending a session or deleting this data.
+
 ## Close a round
 
 `POST /api/v1/groups/{groupId}/rounds/{roundNumber}/close` closes an in-progress
