@@ -32,7 +32,7 @@ public final class AddRoundUseCase {
         } catch (IllegalArgumentException | IllegalStateException exception) {
             throw new RoundOperationRefusedException(exception);
         }
-        roundRepository.save(round);
+        roundRepository.create(round);
         return round;
     }
 }

@@ -107,5 +107,5 @@ And le round du premier groupe reste inchangé
 
 **Notes**
 - Le numéro des rounds est propre à chaque séance et repart à 1 pour une nouvelle séance.
-- La liste complète des statuts, les conditions et le mécanisme de fin d’un round ne sont pas définis dans cette issue.
-- Le traitement des rounds déjà enregistrés sans statut n’est pas défini.
+- La clôture d’un round sera définie ultérieurement et ne fait pas partie de cette issue.
+- Les rounds existants sans statut seront supprimés de la base de données ; leur traitement est hors périmètre.

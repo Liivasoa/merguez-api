@@ -31,9 +31,11 @@ class RestoreGroupOccurrenceRoundsTest {
                 groupId, UUID.randomUUID(), "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
         SessionOccurrence occurrence = new SessionOccurrence(groupId, session.id(), Instant.now());
         Round firstRound = new Round(
-                occurrence, 1, List.of(new Combat(List.of(firstMember, secondMember), Optional.empty())));
+                occurrence, 1, RoundStatus.COMPLETED,
+                List.of(new Combat(List.of(firstMember, secondMember), Optional.empty())));
         Round secondRound = new Round(
-                occurrence, 2, List.of(new Combat(List.of(thirdMember, fourthMember), Optional.empty())));
+                occurrence, 2, RoundStatus.COMPLETED,
+                List.of(new Combat(List.of(thirdMember, fourthMember), Optional.empty())));
 
         Group restoredGroup = Group.restore(
                 groupId,

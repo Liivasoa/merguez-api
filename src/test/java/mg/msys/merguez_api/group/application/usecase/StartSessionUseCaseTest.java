@@ -8,6 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -240,6 +243,30 @@ class StartSessionUseCaseTest {
     }
 
     @Test
+    void refusesAnotherRoundAfterReloadWithoutPersistingIt() {
+        UserId admin = userId();
+        UserId member = userId();
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        InMemorySessionOccurrenceRepository occurrences = new InMemorySessionOccurrenceRepository();
+        occurrences.save(occurrence);
+        InMemoryRoundRepository rounds = new InMemoryRoundRepository();
+        var loader = new ReloadingActiveOccurrenceGroupLoader(
+                group.id(), group.name(), admin, List.of(member), List.of(session), occurrences, rounds);
+        var useCase = new AddRoundUseCase(loader, rounds);
+        var combat = new Combat(List.of(admin, member), Optional.empty());
+        var command = new AddRoundCommand(group.id(), member, List.of(combat));
+        Round firstRound = useCase.execute(command);
+
+        RoundOperationRefusedException refusal = assertThrowsExactly(
+                RoundOperationRefusedException.class, () -> useCase.execute(command));
+
+        assertTrue(refusal.getCause() instanceof IllegalStateException);
+        assertEquals(List.of(firstRound), rounds.savedRounds);
+    }
+
+    @Test
     void propagatesGroupAccessDenialWithoutSavingRound() {
         UserId admin = userId();
         UserId member = userId();
@@ -324,8 +351,9 @@ class StartSessionUseCaseTest {
         Session session = group.createSession(admin, "Training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
         group.startSession(admin, session);
         IllegalArgumentException failure = new IllegalArgumentException("Round storage failed");
-        AddRoundUseCase useCase = new AddRoundUseCase(
-                id -> Optional.of(group), round -> { throw failure; });
+        RoundRepository repository = mock(RoundRepository.class);
+        doThrow(failure).when(repository).create(any(Round.class));
+        AddRoundUseCase useCase = new AddRoundUseCase(id -> Optional.of(group), repository);
         Combat combat = new Combat(List.of(admin, member), Optional.empty());
 
         IllegalArgumentException exception = assertThrowsExactly(
@@ -437,14 +465,19 @@ class StartSessionUseCaseTest {
         private final List<Round> savedRounds = new ArrayList<>();
 
         @Override
+        public void create(Round round) {
+            save(round);
+        }
+
+        @Override
         public void save(Round round) {
-            savedRounds.add(new Round(round.occurrence(), round.number(), round.combats()));
+            savedRounds.add(new Round(round.occurrence(), round.number(), round.status(), round.combats()));
         }
 
         private List<Round> findByOccurrence(SessionOccurrence occurrence) {
             return savedRounds.stream()
                     .filter(round -> round.occurrence().equals(occurrence))
-                    .map(round -> new Round(occurrence, round.number(), round.combats()))
+                    .map(round -> new Round(occurrence, round.number(), round.status(), round.combats()))
                     .toList();
         }
     }

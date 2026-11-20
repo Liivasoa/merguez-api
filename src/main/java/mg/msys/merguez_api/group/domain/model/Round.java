@@ -7,10 +7,11 @@ import java.util.Set;
 
 import mg.msys.merguez_api.user.domain.model.UserId;
 
-public record Round(SessionOccurrence occurrence, int number, List<Combat> combats) {
+public record Round(SessionOccurrence occurrence, int number, RoundStatus status, List<Combat> combats) {
 
     public Round {
         occurrence = Objects.requireNonNull(occurrence, "Session occurrence is required");
+        status = Objects.requireNonNull(status, "Round status is required");
         if (number < 1) {
             throw new IllegalArgumentException("Round number must be positive");
         }
@@ -24,6 +25,10 @@ public record Round(SessionOccurrence occurrence, int number, List<Combat> comba
                 throw new IllegalArgumentException("A participant can appear in only one combat per round");
             }
         }
+    }
+
+    public Round(SessionOccurrence occurrence, int number, List<Combat> combats) {
+        this(occurrence, number, RoundStatus.IN_PROGRESS, combats);
     }
 
     public Round(SessionOccurrence occurrence, List<Combat> combats) {

@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -153,9 +156,8 @@ class AddCombatUseCaseTest {
     void propagatesRoundRepositoryFailureUnchanged() {
         Scenario scenario = scenario();
         IllegalStateException repositoryFailure = new IllegalStateException("Round storage is unavailable");
-        RoundRepository failingRepository = round -> {
-            throw repositoryFailure;
-        };
+        RoundRepository failingRepository = mock(RoundRepository.class);
+        doThrow(repositoryFailure).when(failingRepository).save(any(Round.class));
         AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), failingRepository);
         Combat availableCombat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
@@ -324,6 +326,11 @@ class AddCombatUseCaseTest {
         private final List<Round> saveCalls = new ArrayList<>();
 
         @Override
+        public void create(Round round) {
+            save(round);
+        }
+
+        @Override
         public void save(Round round) {
             saveCalls.add(copy(round));
             int existingIndex = indexOf(round.occurrence(), round.number());
@@ -341,7 +348,7 @@ class AddCombatUseCaseTest {
         private List<Round> findByOccurrence(SessionOccurrence occurrence) {
             return persistedRounds.stream()
                     .filter(round -> round.occurrence().equals(occurrence))
-                    .map(round -> new Round(occurrence, round.number(), round.combats()))
+                    .map(round -> new Round(occurrence, round.number(), round.status(), round.combats()))
                     .toList();
         }
 
@@ -356,7 +363,7 @@ class AddCombatUseCaseTest {
         }
 
         private static Round copy(Round round) {
-            return new Round(round.occurrence(), round.number(), round.combats());
+            return new Round(round.occurrence(), round.number(), round.status(), round.combats());
         }
 
         private List<Round> persistedRounds() {

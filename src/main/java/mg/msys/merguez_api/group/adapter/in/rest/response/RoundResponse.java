@@ -5,12 +5,14 @@ import java.util.UUID;
 
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Round;
+import mg.msys.merguez_api.group.domain.model.RoundStatus;
 
-public record RoundResponse(int number, List<CombatResponse> combats) {
+public record RoundResponse(int number, RoundStatus status, List<CombatResponse> combats) {
 
     public static RoundResponse from(Round round) {
         return new RoundResponse(
                 round.number(),
+                round.status(),
                 round.combats().stream().map(CombatResponse::from).toList());
     }
 

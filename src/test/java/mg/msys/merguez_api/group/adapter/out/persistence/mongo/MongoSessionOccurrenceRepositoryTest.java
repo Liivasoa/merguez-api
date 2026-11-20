@@ -57,6 +57,9 @@ import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
+import mg.msys.merguez_api.group.application.command.AddRoundCommand;
+import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
+import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
@@ -65,6 +68,7 @@ import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.Round;
+import mg.msys.merguez_api.group.domain.model.RoundStatus;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
@@ -168,8 +172,14 @@ class MongoSessionOccurrenceRepositoryTest {
         roundRepository.save(initial);
 
         Group restored = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+        Document storedOccurrence = mongoTemplate.getCollection("session-occurrences")
+                .find(new Document("groupId", group.id().value().toString())).first();
+        assertEquals("IN_PROGRESS", storedOccurrence.get("rounds", Document.class)
+                .get("1", Document.class).getString("status"));
         assertEquals(List.of(occurrence), restored.activeOccurrences());
         assertEquals(List.of(initial), restored.rounds(occurrence));
+        assertThrows(IllegalStateException.class, () -> restored.addRound(admin, occurrence, List.of(
+                new Combat(List.of(first, second), Optional.empty()))));
 
         Round replacement = new Round(occurrence, 1, List.of(
                 new Combat(List.of(first, third), Optional.empty()),
@@ -196,9 +206,9 @@ class MongoSessionOccurrenceRepositoryTest {
         groupRepository.save(group);
         occurrenceRepository.save(occurrence);
 
-        Round firstRound = new Round(occurrence, 1, List.of(
+        Round firstRound = new Round(occurrence, 1, RoundStatus.COMPLETED, List.of(
                 new Combat(List.of(third, fourth), Optional.of(fourth))));
-        Round secondRound = new Round(occurrence, 2, List.of(
+        Round secondRound = new Round(occurrence, 2, RoundStatus.COMPLETED, List.of(
                 new Combat(List.of(first, second), Optional.empty())));
         roundRepository.save(secondRound);
         roundRepository.save(firstRound);
@@ -214,11 +224,69 @@ class MongoSessionOccurrenceRepositoryTest {
         Combat availableCombat = new Combat(List.of(third, fourth), Optional.empty());
         Round updatedSecondRound = restored.addCombat(admin, secondRound, availableCombat);
         assertEquals(List.of(secondRound.combats().get(0), availableCombat), updatedSecondRound.combats());
+        roundRepository.save(updatedSecondRound);
 
         Round nextRound = restored.addRound(admin, occurrence, List.of(
                 new Combat(List.of(first, third), Optional.empty())));
         assertEquals(3, nextRound.number());
         assertEquals(List.of(firstRound, updatedSecondRound, nextRound), restored.rounds(occurrence));
+        roundRepository.create(nextRound);
+        assertEquals(List.of(firstRound, updatedSecondRound, nextRound),
+                activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().rounds(occurrence));
+    }
+
+    @Test
+    void simultaneousRoundCreationsAllowOnlyOneSuccess() throws Exception {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId first = new UserId(UUID.randomUUID());
+        UserId second = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(first, second));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.of(18, 30));
+        SessionOccurrence occurrence = new SessionOccurrence(group.id(), session.id(), Instant.now());
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        CountDownLatch loaded = new CountDownLatch(2);
+        LoadGroupWithActiveOccurrencePort simultaneousLoader = id -> {
+            Optional<Group> result = activeOccurrenceLoader.loadByGroupId(id);
+            loaded.countDown();
+            try {
+                if (!loaded.await(30, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Timed out waiting for concurrent round requests");
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while loading rounds", exception);
+            }
+            return result;
+        };
+        AddRoundUseCase useCase = new AddRoundUseCase(simultaneousLoader, roundRepository);
+        AddRoundCommand command = new AddRoundCommand(group.id(), admin,
+                List.of(new Combat(List.of(first, second), Optional.empty())));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var requests = List.of(
+                    executor.submit(() -> tryAddRound(useCase, command)),
+                    executor.submit(() -> tryAddRound(useCase, command)));
+            List<Boolean> results = new ArrayList<>();
+            for (Future<Boolean> request : requests) {
+                results.add(request.get(30, TimeUnit.SECONDS));
+            }
+            assertEquals(1, results.stream().filter(Boolean::booleanValue).count());
+            Group restored = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+            assertEquals(1, restored.rounds(restored.activeOccurrences().getFirst()).size());
+        } finally {
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(30, TimeUnit.SECONDS));
+        }
+    }
+
+    private static boolean tryAddRound(AddRoundUseCase useCase, AddRoundCommand command) {
+        try {
+            useCase.execute(command);
+            return true;
+        } catch (RoundOperationRefusedException exception) {
+            return false;
+        }
     }
 
     @Test

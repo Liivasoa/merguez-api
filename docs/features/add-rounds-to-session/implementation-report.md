@@ -1,5 +1,11 @@
 # Rapport d’implémentation — add-rounds-to-session
 
+## Évolution : statut des rounds
+
+Un round créé possède le statut `IN_PROGRESS`, conservé en base et retourné par l’API. Un groupe ne peut pas créer un autre round tant qu’un round est en cours ; la création est contrôlée atomiquement en base. Le statut `COMPLETED` permet de représenter un round terminé, mais son mécanisme de clôture reste hors périmètre : aucun nouveau round ne peut être créé après le premier tant que cette fonctionnalité n’existe pas.
+
+Les rounds enregistrés avant l’ajout du statut doivent être supprimés de la base par l’équipe avant utilisation de cette évolution. Aucune suppression ni migration automatique n’est réalisée.
+
 ## Périmètre et résultats
 
 - **Domaine — complet** ([issue](./domain_add-rounds-to-session-issue.md) ; D1–D9) : modèles `Round`/`Combat`, accès réservé aux membres du groupe, numérotation par occurrence, validation de composition et d’affectation des membres, gagnant facultatif, restauration d’une occurrence active et de ses rounds.
@@ -11,7 +17,7 @@
 
 Le modèle de groupes, les membres, les séances planifiées et le stockage des occurrences actives existaient. Cette implémentation ajoute le modèle de rounds/combats et ses invariants, la restauration du domaine, les ports et cas d’utilisation applicatifs, le stockage Mongo, les requêtes/réponses REST et leur câblage Spring.
 
-## Vérification
+## Vérification de l’implémentation initiale
 
 - Tests de domaine ciblés : **46 réussis**.
 - Tests applicatifs ciblés : **35 réussis**.

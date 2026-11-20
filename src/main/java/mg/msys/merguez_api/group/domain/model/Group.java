@@ -150,6 +150,11 @@ public final class Group {
         if (occurrence == null || !activeOccurrences.contains(occurrence)) {
             throw new IllegalStateException("Session occurrence must be in progress");
         }
+        if (roundsByOccurrence.values().stream()
+                .flatMap(List::stream)
+                .anyMatch(round -> round.status() == RoundStatus.IN_PROGRESS)) {
+            throw new IllegalStateException("A round is already in progress in this group");
+        }
         if (combats == null || combats.isEmpty()) {
             throw new IllegalArgumentException("A round must contain at least one combat");
         }
@@ -187,7 +192,7 @@ public final class Group {
 
         List<Combat> updatedCombats = new ArrayList<>(round.combats());
         updatedCombats.add(combat);
-        Round updatedRound = new Round(round.occurrence(), round.number(), updatedCombats);
+        Round updatedRound = new Round(round.occurrence(), round.number(), round.status(), updatedCombats);
         rounds.set(roundIndex, updatedRound);
         return updatedRound;
     }

@@ -27,4 +27,4 @@ And elles permettent au domaine de déterminer si le groupe a déjà un round en
 
 **Notes**
 - Le modèle de stockage exact des rounds et des combats n’est pas imposé par cette issue.
-- Le traitement des rounds déjà enregistrés sans statut n’est pas défini.
+- Les rounds existants sans statut seront supprimés de la base de données ; aucune migration de ces rounds n’est prévue dans cette issue.
