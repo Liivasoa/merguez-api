@@ -28,6 +28,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -51,6 +52,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import mg.msys.merguez_api.group.application.command.AddRoundCommand;
 import mg.msys.merguez_api.group.application.command.AddCombatCommand;
 import mg.msys.merguez_api.group.application.command.CloseRoundCommand;
+import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
@@ -59,6 +61,7 @@ import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
 import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
+import mg.msys.merguez_api.group.application.usecase.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
@@ -71,7 +74,9 @@ import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.RoundStatus;
 import mg.msys.merguez_api.group.domain.model.Session;
+import mg.msys.merguez_api.group.domain.model.SessionClosureResult;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
+import mg.msys.merguez_api.group.domain.model.SessionPayment;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 @WebMvcTest(GroupController.class)
@@ -100,6 +105,61 @@ class GroupControllerTest {
 
     @MockitoBean
     private CloseRoundUseCase closeRoundUseCase;
+
+    @MockitoBean
+    private CloseSessionUseCase closeSessionUseCase;
+
+    @Test
+    void closeScheduledSessionForwardsRequestAndReturnsCompleteClosureResult() throws Exception {
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId debtor = new UserId(UUID.randomUUID());
+        UserId inactive = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", requester, List.of(debtor, inactive));
+        Session session = group.createSession(requester, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(requester, session);
+        Combat combat = new Combat(List.of(requester, debtor), Optional.empty());
+        Round round = group.addRound(requester, occurrence, List.of(combat));
+        group.closeRound(requester, round, List.of(new Combat(combat.participants(), Optional.of(requester))));
+        SessionClosureResult result = group.closeSession(requester, occurrence);
+        assertTrue(result.occurrence().isClosed());
+        assertEquals(Map.of(requester, 1, debtor, -1, inactive, 0), result.netScores());
+        assertEquals(List.of(new SessionPayment(debtor, requester, 1)), result.payments());
+        when(closeSessionUseCase.execute(any(CloseSessionCommand.class))).thenReturn(result);
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
+                        group.id().value(), session.id())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"requesterId":"%s"}
+                        """.formatted(requester.value())))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.occurrence.groupId").value(group.id().value().toString()))
+                .andExpect(jsonPath("$.occurrence.scheduleId").value(session.id().toString()))
+                .andExpect(jsonPath("$.occurrence.startedAt").value(occurrence.startedAt().toString()))
+                .andExpect(jsonPath("$.netScores.length()").value(3))
+                .andExpect(jsonPath("$.netScores['" + requester.value() + "']").value(1))
+                .andExpect(jsonPath("$.netScores['" + debtor.value() + "']").value(-1))
+                .andExpect(jsonPath("$.netScores['" + inactive.value() + "']").value(0))
+                .andExpect(jsonPath("$.payments.length()").value(1))
+                .andExpect(jsonPath("$.payments[0].debtorId").value(debtor.value().toString()))
+                .andExpect(jsonPath("$.payments[0].creditorId").value(requester.value().toString()))
+                .andExpect(jsonPath("$.payments[0].amount").value(1));
+
+        verify(closeSessionUseCase).execute(new CloseSessionCommand(group.id(), requester, session.id()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"requesterId\":null}", "{\"requesterId\":\"not-a-uuid\"}"})
+    void closeScheduledSessionRejectsInvalidRequesterBeforeCallingUseCase(String body) throws Exception {
+        mockMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
+                        UUID.randomUUID(), UUID.randomUUID())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(closeSessionUseCase);
+    }
 
     @Test
     void closesRoundAndReturnsOptionalWinners() throws Exception {
