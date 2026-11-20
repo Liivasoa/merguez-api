@@ -7,9 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,44 @@ class CloseSessionTest {
         assertEquals(member, payment.debtor());
         assertEquals(admin, payment.creditor());
         assertEquals(1, payment.amount());
+    }
+
+    @Test
+    void settlesNetScoresAcrossClosedRoundsIncludingInactiveMember() {
+        UserId a = new UserId(UUID.randomUUID());
+        UserId b = new UserId(UUID.randomUUID());
+        UserId c = new UserId(UUID.randomUUID());
+        UserId d = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", a, List.of(b, c, d));
+        Session session = group.createSession(a, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(a, session);
+
+        for (Combat result : List.of(
+                new Combat(List.of(a, b), Optional.of(a)),
+                new Combat(List.of(a, b), Optional.of(a)),
+                new Combat(List.of(b, c), Optional.of(b)))) {
+            Combat combat = new Combat(result.participants(), Optional.empty());
+            Round round = group.addRound(a, occurrence, List.of(combat));
+            group.closeRound(a, round, List.of(result));
+        }
+        assertEquals(3, group.rounds(occurrence).size());
+        assertTrue(group.rounds(occurrence).stream().allMatch(round -> round.status() == RoundStatus.CLOSED));
+
+        var result = group.closeSession(a, occurrence);
+
+        assertTrue(result.occurrence().isClosed());
+        assertEquals(Map.of(a, 2, b, -1, c, -1, d, 0), result.netScores());
+        assertEquals(0, result.netScores().values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(2, result.payments().size());
+        assertEquals(Set.of(new SessionPayment(b, a, 1), new SessionPayment(c, a, 1)),
+                Set.copyOf(result.payments()));
+
+        Map<UserId, Integer> remaining = new HashMap<>(result.netScores());
+        for (SessionPayment payment : result.payments()) {
+            remaining.compute(payment.debtor(), (ignored, score) -> score + payment.amount());
+            remaining.compute(payment.creditor(), (ignored, score) -> score - payment.amount());
+        }
+        assertEquals(Map.of(a, 0, b, 0, c, 0, d, 0), remaining);
     }
 
     @Test
