@@ -107,6 +107,47 @@ class CloseSessionTest {
     }
 
     @Test
+    void settlesMatchingPositionsInTwoPaymentsRegardlessOfPaymentOrder() {
+        UserId a = new UserId(UUID.randomUUID());
+        UserId b = new UserId(UUID.randomUUID());
+        UserId c = new UserId(UUID.randomUUID());
+        UserId d = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", a, List.of(b, c, d));
+        Session session = group.createSession(a, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(a, session);
+
+        Combat ad = new Combat(List.of(a, d), Optional.empty());
+        Combat bc = new Combat(List.of(b, c), Optional.empty());
+        for (int i = 0; i < 7; i++) {
+            Round round = group.addRound(a, occurrence, List.of(ad, bc));
+            group.closeRound(a, round, List.of(
+                    new Combat(ad.participants(), Optional.of(a)),
+                    new Combat(bc.participants(), Optional.of(b))));
+        }
+        Round lastRound = group.addRound(a, occurrence, List.of(ad));
+        group.closeRound(a, lastRound, List.of(new Combat(ad.participants(), Optional.of(a))));
+        assertEquals(8, group.rounds(occurrence).size());
+        assertTrue(group.rounds(occurrence).stream().allMatch(round -> round.status() == RoundStatus.CLOSED));
+
+        var result = group.closeSession(a, occurrence);
+
+        assertTrue(result.occurrence().isClosed());
+        assertEquals(Map.of(a, 8, b, 7, c, -7, d, -8), result.netScores());
+        assertEquals(0, result.netScores().values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(2, result.payments().size());
+        assertEquals(Set.of(new SessionPayment(d, a, 8), new SessionPayment(c, b, 7)),
+                Set.copyOf(result.payments()));
+
+        Map<UserId, Integer> remaining = new HashMap<>(result.netScores());
+        for (SessionPayment payment : result.payments()) {
+            remaining.compute(payment.debtor(), (ignored, score) -> score + payment.amount());
+            remaining.compute(payment.creditor(), (ignored, score) -> score - payment.amount());
+        }
+        assertEquals(Map.of(a, 0, b, 0, c, 0, d, 0), remaining);
+        assertEquals(0, remaining.values().stream().mapToInt(Integer::intValue).sum());
+    }
+
+    @Test
     void memberClosesSessionAndCalculatesCombatResult() {
         UserId admin = new UserId(UUID.randomUUID());
         UserId member = new UserId(UUID.randomUUID());
