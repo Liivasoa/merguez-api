@@ -78,9 +78,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
     }
 
     private static Document roundUpdate(String path, Round round) {
-        // Every round mutation must advance this revision in the same atomic update.
-        return new Document("$set", new Document(path, toStoredRound(round)))
-                .append("$inc", new Document("roundsRevision", 1L));
+        return new Document("$set", new Document(path, toStoredRound(round)));
     }
 
     private static Document toStoredRound(Round round) {
