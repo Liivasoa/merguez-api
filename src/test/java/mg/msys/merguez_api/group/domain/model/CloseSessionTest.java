@@ -99,4 +99,29 @@ class CloseSessionTest {
         assertEquals(scores, firstResult.netScores());
         assertEquals(payments, firstResult.payments());
     }
+
+    @Test
+    void refusesToCloseAnActiveSessionWithoutRoundsWithoutChangingState() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        var activeOccurrences = group.activeOccurrences();
+        var sessions = group.sessions();
+        var members = group.members();
+        assertEquals(List.of(occurrence), activeOccurrences);
+        assertTrue(occurrence.isStarted());
+        assertFalse(occurrence.isClosed());
+        assertTrue(group.rounds(occurrence).isEmpty());
+
+        assertThrows(IllegalStateException.class, () -> group.closeSession(admin, occurrence));
+
+        assertTrue(occurrence.isStarted());
+        assertFalse(occurrence.isClosed());
+        assertEquals(activeOccurrences, group.activeOccurrences());
+        assertEquals(sessions, group.sessions());
+        assertEquals(members, group.members());
+        assertTrue(group.rounds(occurrence).isEmpty());
+    }
 }
