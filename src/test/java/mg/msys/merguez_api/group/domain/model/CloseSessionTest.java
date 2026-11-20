@@ -1,13 +1,17 @@
 package mg.msys.merguez_api.group.domain.model;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mockStatic;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
@@ -17,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 import mg.msys.merguez_api.user.domain.model.UserId;
 
@@ -246,6 +251,43 @@ class CloseSessionTest {
         assertEquals(List.of(closedRound), original.rounds(closedOccurrence));
         assertEquals(Map.of(admin, 1, member, -1), firstResult.netScores());
         assertEquals(List.of(new SessionPayment(member, admin, 1)), firstResult.payments());
+    }
+
+    @Test
+    void preservesClosedOccurrenceRoundsWhenRestartedAtSameInstant() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        Instant startedAt = Instant.parse("2026-01-01T12:00:00Z");
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+
+        try (MockedStatic<Instant> clock = mockStatic(Instant.class, CALLS_REAL_METHODS)) {
+            clock.when(Instant::now).thenReturn(startedAt);
+            SessionOccurrence closedOccurrence = group.startSession(admin, session);
+            Round firstRound = group.addRound(admin, closedOccurrence, List.of(combat));
+            Round closedRound = group.closeRound(admin, firstRound,
+                    List.of(new Combat(combat.participants(), Optional.of(admin))));
+            group.closeSession(admin, closedOccurrence);
+            assertEquals(List.of(closedRound), group.rounds(closedOccurrence));
+
+            SessionOccurrence activeOccurrence = group.startSession(admin, session);
+            assertEquals(startedAt, closedOccurrence.startedAt());
+            assertEquals(startedAt, activeOccurrence.startedAt());
+            assertTrue(closedOccurrence.isClosed());
+            assertFalse(activeOccurrence.isClosed());
+            var closedRoundsAfterRestart = group.rounds(closedOccurrence);
+            var activeRoundsAfterRestart = group.rounds(activeOccurrence);
+            Round newRound = group.addRound(admin, activeOccurrence, List.of(combat));
+
+            assertAll(
+                    () -> assertEquals(List.of(closedRound), closedRoundsAfterRestart),
+                    () -> assertTrue(activeRoundsAfterRestart.isEmpty()),
+                    () -> assertEquals(List.of(closedRound), group.rounds(closedOccurrence)),
+                    () -> assertEquals(List.of(newRound), group.rounds(activeOccurrence)),
+                    () -> assertEquals(1, newRound.number()),
+                    () -> assertSame(activeOccurrence, group.activeOccurrences().getFirst()));
+        }
     }
 
     @Test
