@@ -5,11 +5,13 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
@@ -231,6 +233,61 @@ public final class Group {
         Round closed = new Round(round.occurrence(), round.number(), RoundStatus.CLOSED, updated);
         rounds.set(index, closed);
         return closed;
+    }
+
+    public SessionClosureResult closeSession(UserId requester, SessionOccurrence occurrence) {
+        if (!isMemberOrAdmin(requester)) {
+            throw new GroupAccessDeniedException("Only group members can close sessions");
+        }
+        if (occurrence == null || !activeOccurrences.contains(occurrence)) {
+            throw new IllegalStateException("Session occurrence must be in progress");
+        }
+        List<Round> rounds = roundsByOccurrence.get(occurrence);
+        if (rounds == null || rounds.isEmpty()) {
+            throw new IllegalStateException("A session must contain at least one round");
+        }
+        if (rounds.stream().anyMatch(round -> round.status() != RoundStatus.CLOSED)) {
+            throw new IllegalStateException("All rounds must be closed before closing the session");
+        }
+
+        Map<UserId, Integer> netScores = new LinkedHashMap<>();
+        netScores.put(creator, 0);
+        participants.forEach(participant -> netScores.put(participant, 0));
+        rounds.stream()
+                .flatMap(round -> round.combats().stream())
+                .forEach(combat -> combat.winner().ifPresent(winner -> {
+                    UserId loser = combat.participants().stream()
+                            .filter(participant -> !participant.equals(winner))
+                            .findFirst()
+                            .orElseThrow();
+                    netScores.compute(winner, (ignored, score) -> score + 1);
+                    netScores.compute(loser, (ignored, score) -> score - 1);
+                }));
+
+        List<UserId> creditors = netScores.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(ArrayList::new));
+        List<UserId> debtors = netScores.entrySet().stream()
+                .filter(entry -> entry.getValue() < 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(ArrayList::new));
+        Map<UserId, Integer> remainingCredits = new HashMap<>(netScores);
+        List<SessionPayment> payments = new ArrayList<>();
+        for (UserId creditor : creditors) {
+            for (UserId debtor : debtors) {
+                int amount = Math.min(remainingCredits.get(creditor), -remainingCredits.get(debtor));
+                if (amount > 0) {
+                    payments.add(new SessionPayment(debtor, creditor, amount));
+                    remainingCredits.compute(creditor, (ignored, balance) -> balance - amount);
+                    remainingCredits.compute(debtor, (ignored, balance) -> balance + amount);
+                }
+            }
+        }
+
+        occurrence.close();
+        activeOccurrences.remove(occurrence);
+        return new SessionClosureResult(occurrence, netScores, payments);
     }
 
     public List<SessionOccurrence> activeOccurrences() {
