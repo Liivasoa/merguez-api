@@ -284,6 +284,19 @@ public final class Group {
         List<SessionPayment> payments = new ArrayList<>();
         for (UserId creditor : creditors) {
             for (UserId debtor : debtors) {
+                if (remainingCredits.get(creditor) > 0
+                        && remainingCredits.get(creditor).equals(-remainingCredits.get(debtor))) {
+                    int amount = remainingCredits.get(creditor);
+                    payments.add(new SessionPayment(debtor, creditor, amount));
+                    remainingCredits.put(creditor, 0);
+                    remainingCredits.put(debtor, 0);
+                    break;
+                }
+            }
+        }
+
+        for (UserId creditor : creditors) {
+            for (UserId debtor : debtors) {
                 int amount = Math.min(remainingCredits.get(creditor), -remainingCredits.get(debtor));
                 if (amount > 0) {
                     payments.add(new SessionPayment(debtor, creditor, amount));
