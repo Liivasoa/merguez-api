@@ -1,8 +1,11 @@
 package mg.msys.merguez_api.group.application.usecase;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
+import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
+import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
@@ -12,22 +15,28 @@ import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 
 public final class CloseSessionUseCase {
     private final LoadGroupWithActiveOccurrencePort groupLoader;
+    private final GroupRepository groupRepository;
     private final SaveClosedSessionOccurrencePort occurrenceSaver;
     private final LogSessionClosurePort closureLogger;
 
     public CloseSessionUseCase(
             LoadGroupWithActiveOccurrencePort groupLoader,
+            GroupRepository groupRepository,
             SaveClosedSessionOccurrencePort occurrenceSaver,
             LogSessionClosurePort closureLogger) {
         this.groupLoader = Objects.requireNonNull(groupLoader);
+        this.groupRepository = Objects.requireNonNull(groupRepository);
         this.occurrenceSaver = Objects.requireNonNull(occurrenceSaver);
         this.closureLogger = Objects.requireNonNull(closureLogger);
     }
 
     public SessionClosureResult execute(CloseSessionCommand command) {
-        Group group = groupLoader.loadByGroupId(command.groupId())
-                .orElseThrow(() -> new IllegalStateException("Group or active session occurrence not found"));
-        SessionOccurrence occurrence = group.activeOccurrences().stream().findFirst().orElse(null);
+        Optional<Group> activeGroup = groupLoader.loadByGroupId(command.groupId());
+        Group group = activeGroup.orElseGet(() -> groupRepository.findById(command.groupId())
+                .orElseThrow(() -> new GroupNotFoundException(command.groupId())));
+        SessionOccurrence occurrence = activeGroup.isPresent()
+                ? group.activeOccurrences().stream().findFirst().orElse(null)
+                : null;
         SessionClosureResult result = group.closeSession(command.requester(), occurrence);
         occurrenceSaver.save(result.occurrence());
         result.netScores().keySet().forEach(member -> closureLogger.log(member, result));
