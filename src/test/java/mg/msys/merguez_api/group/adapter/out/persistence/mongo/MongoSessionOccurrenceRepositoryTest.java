@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -31,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,13 +58,16 @@ import org.testcontainers.mongodb.MongoDBContainer;
 import mg.msys.merguez_api.group.adapter.in.rest.GroupController;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
+import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.application.command.AddRoundCommand;
+import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
+import mg.msys.merguez_api.group.application.usecase.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
@@ -256,6 +261,79 @@ class MongoSessionOccurrenceRepositoryTest {
                 () -> assertEquals(after, collection.find(new Document("_id", id)).first()),
                 () -> assertEquals(List.of(next),
                         activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().activeOccurrences()));
+    }
+
+    @Test
+    void refusesSessionClosureWhenAnOpenRoundIsAddedAfterLoading() {
+        assertClosureRefusesConcurrentRoundChange(true);
+    }
+
+    @Test
+    void refusesSessionClosureWhenAClosedRoundIsModifiedAfterLoading() {
+        assertClosureRefusesConcurrentRoundChange(false);
+    }
+
+    private void assertClosureRefusesConcurrentRoundChange(boolean addRound) {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        Round initial = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(admin))));
+        roundRepository.save(initial);
+        Round changed = addRound
+                ? new Round(occurrence, 2, List.of(new Combat(List.of(admin, member), Optional.empty())))
+                : new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                        new Combat(List.of(admin, member), Optional.of(member))));
+        List<Round> expectedRounds = addRound ? List.of(initial, changed) : List.of(changed);
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        Document filter = new Document("groupId", group.id().value().toString());
+        Document before = collection.find(filter).first();
+        assertNotNull(before);
+        AtomicReference<Document> afterConcurrentWrite = new AtomicReference<>();
+        LoadGroupWithActiveOccurrencePort racingLoader = id -> {
+            Group snapshot = activeOccurrenceLoader.loadByGroupId(id).orElseThrow();
+            assertEquals(List.of(initial), snapshot.rounds(snapshot.activeOccurrences().getFirst()));
+            if (addRound) {
+                roundRepository.create(changed);
+            } else {
+                roundRepository.replace(initial, changed);
+            }
+            assertEquals(expectedRounds, activeOccurrenceLoader.loadByGroupId(id).orElseThrow().rounds(occurrence));
+            Document updated = collection.find(filter).first();
+            assertNotNull(updated);
+            assertEquals("IN_PROGRESS", updated.getString("status"));
+            assertNotEquals(before.get("rounds"), updated.get("rounds"));
+            afterConcurrentWrite.set(updated);
+            return Optional.of(snapshot);
+        };
+        LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        CloseSessionUseCase useCase =
+                new CloseSessionUseCase(racingLoader, groupRepository, closedOccurrenceSaver, logger);
+
+        assertAll(
+                () -> {
+                    RuntimeException conflict = assertThrows(RuntimeException.class, () -> useCase.execute(
+                            new CloseSessionCommand(group.id(), admin, session.id())));
+                    String description = (conflict.getClass().getSimpleName() + " " + conflict.getMessage())
+                            .toLowerCase(java.util.Locale.ROOT);
+                    assertTrue(description.contains("conflict") || description.contains("changed")
+                                    || description.contains("modified") || description.contains("concurrent")
+                                    || description.contains("stale"),
+                            "The refusal must explicitly identify the concurrent change");
+                },
+                () -> assertNotNull(afterConcurrentWrite.get(), "The real concurrent write must have completed"),
+                () -> assertEquals(afterConcurrentWrite.get(), collection.find(filter).first(),
+                        "The closure must preserve the occurrence and the concurrently written rounds"),
+                () -> assertEquals("IN_PROGRESS", collection.find(filter).first().getString("status")),
+                () -> assertEquals(afterConcurrentWrite.get().get("rounds"), collection.find(filter).first().get("rounds")),
+                () -> assertEquals(1L, collection.countDocuments(filter)),
+                () -> assertEquals(expectedRounds,
+                        activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().rounds(occurrence)),
+                () -> verifyNoInteractions(logger));
     }
 
     @Test
