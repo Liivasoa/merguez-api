@@ -24,7 +24,11 @@
         {"listen": "prerequest", "script": {"type": "text/javascript", "exec": [
           "pm.collectionVariables.unset('groupId');",
           "pm.collectionVariables.unset('sessionId');",
-          "pm.collectionVariables.unset('roundNumber');"
+          "pm.collectionVariables.unset('roundNumber');",
+          "pm.collectionVariables.unset('openSecondRoundToken');",
+          "pm.collectionVariables.unset('sessionClosureRefusal');",
+          "pm.collectionVariables.unset('openSecondRoundSnapshot');",
+          "pm.collectionVariables.unset('sessionClosureRefusalSnapshot');"
         ]}},
         {"listen": "test", "script": {"type": "text/javascript", "exec": [
           "pm.test('Group created with one admin and five members', function () {",
@@ -179,7 +183,14 @@
     },
     {
       "name": "9. Créer une deuxième manche",
-      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+      "event": [
+      {"listen": "prerequest", "script": {"type": "text/javascript", "exec": [
+        "pm.collectionVariables.unset('openSecondRoundToken');",
+        "pm.collectionVariables.unset('sessionClosureRefusal');",
+        "pm.collectionVariables.unset('openSecondRoundSnapshot');",
+        "pm.collectionVariables.unset('sessionClosureRefusalSnapshot');"
+      ]}},
+      {"listen": "test", "script": {"type": "text/javascript", "exec": [
         "pm.test('A second round can start after closure', function () {",
         "    pm.response.to.have.status(201);",
         "    const round = pm.response.json();",
@@ -187,6 +198,7 @@
         "    pm.expect(round.status).to.equal('IN_PROGRESS');",
         "    pm.expect(round.combats).to.deep.equal([{participantIds: [pm.variables.get('creatorId'), pm.variables.get('participant5Id')], winnerId: null}]);",
         "    pm.collectionVariables.set('roundNumber', round.number);",
+        "    pm.collectionVariables.set('openSecondRoundToken', pm.variables.replaceIn('{{$guid}}'));",
         "});"
       ]}}],
       "request": {
@@ -198,7 +210,33 @@
     },
     {
       "name": "10. Clôturer la deuxième manche",
-      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+      "event": [
+      {"listen": "prerequest", "script": {"type": "text/javascript", "exec": [
+        "pm.collectionVariables.unset('openSecondRoundSnapshot');",
+        "pm.collectionVariables.unset('sessionClosureRefusalSnapshot');",
+        "const token = pm.collectionVariables.get('openSecondRoundToken');",
+        "const refusal = pm.collectionVariables.get('sessionClosureRefusal');",
+        "if (token !== undefined) pm.collectionVariables.set('openSecondRoundSnapshot', token);",
+        "if (refusal !== undefined) pm.collectionVariables.set('sessionClosureRefusalSnapshot', refusal);",
+        "pm.collectionVariables.unset('openSecondRoundToken');",
+        "pm.collectionVariables.unset('sessionClosureRefusal');"
+      ]}},
+      {"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Session closure is refused while the second round is open', function () {",
+        "    const stored = pm.collectionVariables.get('sessionClosureRefusalSnapshot');",
+        "    pm.expect(stored, 'missing prior response to session closure').to.be.a('string').and.not.empty;",
+        "    const captured = JSON.parse(stored);",
+        "    const token = pm.collectionVariables.get('openSecondRoundSnapshot');",
+        "    pm.expect(token, 'second round must have been created successfully').to.be.a('string').and.not.empty;",
+        "    pm.expect(captured.openRoundToken).to.equal(token);",
+        "    const path = '/api/v1/groups/' + pm.variables.get('groupId') + '/sessions/' + pm.variables.get('sessionId') + '/close';",
+        "    pm.expect(captured.method).to.equal('POST');",
+        "    pm.expect(captured.url).to.equal(pm.variables.get('baseUrl').replace(/\\/$/, '') + path);",
+        "    pm.expect(captured.requestBody).to.deep.equal({requesterId: pm.variables.get('creatorId')});",
+        "    pm.expect(captured.status).to.equal(409);",
+        "    pm.expect(captured.contentType).to.match(/^application\\/problem\\+json(?:\\s*;|$)/i);",
+        "    pm.expect(captured.body).to.deep.equal({type: 'about:blank', title: 'Conflict', status: 409, detail: 'The session closure request was refused.', instance: path});",
+        "});",
         "pm.test('Second round is closed', function () {",
         "    pm.response.to.have.status(200);",
         "    const round = pm.response.json();",

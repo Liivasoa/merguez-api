@@ -5,15 +5,19 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
+import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 public final class Group {
@@ -25,7 +29,7 @@ public final class Group {
     private final List<UserId> participants;
     private final List<Session> sessions = new ArrayList<>();
     private final List<SessionOccurrence> activeOccurrences = new ArrayList<>();
-    private final Map<SessionOccurrence, List<Round>> roundsByOccurrence = new HashMap<>();
+    private final Map<SessionOccurrence, List<Round>> roundsByOccurrence = new IdentityHashMap<>();
 
     private Group(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
         this.id = id;
@@ -147,7 +151,7 @@ public final class Group {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can add rounds");
         }
-        if (occurrence == null || !activeOccurrences.contains(occurrence)) {
+        if (occurrence == null || occurrence.isClosed() || !activeOccurrences.contains(occurrence)) {
             throw new IllegalStateException("Session occurrence must be in progress");
         }
         if (roundsByOccurrence.values().stream()
@@ -163,8 +167,9 @@ public final class Group {
                 throw new IllegalArgumentException("Combat participants must belong to this group");
             }
         }
-        List<Round> rounds = roundsByOccurrence.get(occurrence);
-        Round round = new Round(occurrence, rounds.size() + 1, combats);
+        SessionOccurrence activeOccurrence = activeOccurrences.get(activeOccurrences.indexOf(occurrence));
+        List<Round> rounds = roundsByOccurrence.get(activeOccurrence);
+        Round round = new Round(activeOccurrence, rounds.size() + 1, combats);
         rounds.add(round);
         return round;
     }
@@ -173,10 +178,10 @@ public final class Group {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can add combats");
         }
-        if (round == null || !activeOccurrences.contains(round.occurrence())) {
+        if (round == null || round.occurrence().isClosed() || !activeOccurrences.contains(round.occurrence())) {
             throw new IllegalStateException("Session occurrence must be in progress");
         }
-        List<Round> rounds = roundsByOccurrence.get(round.occurrence());
+        List<Round> rounds = findRounds(round.occurrence());
         int roundIndex = rounds == null ? -1 : rounds.indexOf(round);
         if (roundIndex < 0) {
             throw new IllegalArgumentException("Round must belong to this group");
@@ -204,10 +209,10 @@ public final class Group {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can close rounds");
         }
-        if (round == null || !activeOccurrences.contains(round.occurrence())) {
+        if (round == null || round.occurrence().isClosed() || !activeOccurrences.contains(round.occurrence())) {
             throw new IllegalStateException("Session occurrence must be in progress");
         }
-        List<Round> rounds = roundsByOccurrence.get(round.occurrence());
+        List<Round> rounds = findRounds(round.occurrence());
         int index = rounds == null ? -1 : rounds.indexOf(round);
         if (index < 0) {
             throw new IllegalArgumentException("Round must belong to this group");
@@ -233,13 +238,106 @@ public final class Group {
         return closed;
     }
 
+    public SessionClosureResult closeSession(UserId requester, SessionOccurrence occurrence) {
+        if (!isMemberOrAdmin(requester)) {
+            throw new GroupAccessDeniedException("Only group members can close sessions");
+        }
+        if (occurrence == null || occurrence.isClosed() || !activeOccurrences.contains(occurrence)) {
+            throw new SessionClosureRejectedException("Session occurrence must be in progress");
+        }
+        SessionOccurrence activeOccurrence = activeOccurrences.get(activeOccurrences.indexOf(occurrence));
+        List<Round> rounds = roundsByOccurrence.get(activeOccurrence);
+        if (rounds == null || rounds.isEmpty()) {
+            throw new SessionClosureRejectedException("A session must contain at least one round");
+        }
+        if (rounds.stream().anyMatch(round -> round.status() != RoundStatus.CLOSED)) {
+            throw new SessionClosureRejectedException("All rounds must be closed before closing the session");
+        }
+
+        Map<UserId, Integer> netScores = new LinkedHashMap<>();
+        netScores.put(creator, 0);
+        participants.forEach(participant -> netScores.put(participant, 0));
+        rounds.stream()
+                .flatMap(round -> round.combats().stream())
+                .forEach(combat -> combat.winner().ifPresent(winner -> {
+                    UserId loser = combat.participants().stream()
+                            .filter(participant -> !participant.equals(winner))
+                            .findFirst()
+                            .orElseThrow();
+                    netScores.compute(winner, (ignored, score) -> score + 1);
+                    netScores.compute(loser, (ignored, score) -> score - 1);
+                }));
+
+        List<SessionPayment> payments = calculatePayments(netScores);
+
+        activeOccurrence.close();
+        occurrence.close();
+        activeOccurrences.remove(activeOccurrence);
+        return new SessionClosureResult(occurrence, netScores, payments);
+    }
+
+    private static List<SessionPayment> calculatePayments(Map<UserId, Integer> netScores) {
+        List<UserId> creditors = netScores.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(ArrayList::new));
+        List<UserId> debtors = netScores.entrySet().stream()
+                .filter(entry -> entry.getValue() < 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(ArrayList::new));
+        Map<UserId, Integer> remainingCredits = new HashMap<>(netScores);
+        List<SessionPayment> payments = new ArrayList<>();
+        for (UserId creditor : creditors) {
+            for (UserId debtor : debtors) {
+                if (remainingCredits.get(creditor) > 0
+                        && remainingCredits.get(creditor).equals(-remainingCredits.get(debtor))) {
+                    int amount = remainingCredits.get(creditor);
+                    payments.add(new SessionPayment(debtor, creditor, amount));
+                    remainingCredits.put(creditor, 0);
+                    remainingCredits.put(debtor, 0);
+                    break;
+                }
+            }
+        }
+
+        for (UserId creditor : creditors) {
+            for (UserId debtor : debtors) {
+                int amount = Math.min(remainingCredits.get(creditor), -remainingCredits.get(debtor));
+                if (amount > 0) {
+                    payments.add(new SessionPayment(debtor, creditor, amount));
+                    remainingCredits.compute(creditor, (ignored, balance) -> balance - amount);
+                    remainingCredits.compute(debtor, (ignored, balance) -> balance + amount);
+                }
+            }
+        }
+
+        return payments;
+    }
+
     public List<SessionOccurrence> activeOccurrences() {
         return List.copyOf(activeOccurrences);
     }
 
     public List<Round> rounds(SessionOccurrence occurrence) {
-        List<Round> rounds = roundsByOccurrence.get(occurrence);
+        List<Round> rounds = findRounds(occurrence);
         return rounds == null ? List.of() : List.copyOf(rounds);
+    }
+
+    private List<Round> findRounds(SessionOccurrence occurrence) {
+        List<Round> rounds = roundsByOccurrence.get(occurrence);
+        if (rounds != null || occurrence == null) {
+            return rounds;
+        }
+        for (SessionOccurrence activeOccurrence : activeOccurrences) {
+            if (activeOccurrence.equals(occurrence)) {
+                return roundsByOccurrence.get(activeOccurrence);
+            }
+        }
+        return roundsByOccurrence.entrySet().stream()
+                .filter(entry -> entry.getKey().equals(occurrence))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(null);
     }
 
     private boolean isMemberOrAdmin(UserId requester) {

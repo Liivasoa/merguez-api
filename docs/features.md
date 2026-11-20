@@ -56,8 +56,9 @@ Règles :
 Règles :
 - Seule une séance en cours peut être clôturer
 - Seule une séance avec au moins un round peut être clôturer
+- Tous les rounds de la séance doivent être clôturés ; sinon, la clôture est refusée sans lancer le traitement
 - Le calcul des merguez(points) doit être lancé
-- Chaque membre doit être notifié
+- La notification de chaque membre est reportée ; un log la remplace temporairement
 
 Règles sur le calcul des merguez (points) :
 - À la fin d'une séance, le score net d'un membre est son nombre de victoires moins son nombre de défaites.

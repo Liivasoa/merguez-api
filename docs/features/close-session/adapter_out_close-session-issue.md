@@ -1,10 +1,10 @@
 # Clôturer une séance : adaptateurs sortants
 
 **Contexte**
-Conserver la clôture de la séance et transmettre les notifications aux membres du groupe.
+Conserver la clôture de la séance et journaliser le remplacement temporaire des notifications aux membres du groupe.
 
 **Critères d'acceptation**
-Feature: Persister la clôture et transmettre les notifications
+Feature: Persister la clôture et journaliser les notifications reportées
 
 1. Conserver la clôture
 Ref Domain: D1, D2, D5, D6
@@ -13,13 +13,13 @@ Given une séance clôturée après calcul des merguez
 When l'adaptateur de persistance sauvegarde puis recharge la séance
 Then la séance rechargée est identifiée comme clôturée
 
-2. Transmettre les notifications
+2. Journaliser les notifications reportées
 Ref Domain: D1, D2, D5, D6
-Scenario: Notifier chaque membre du groupe
-Given une demande de notification de clôture destinée à chaque membre du groupe
-When l'adaptateur de notification la transmet
-Then chaque membre est destinataire d'une notification, y compris les membres dont le score est nul
+Scenario: Journaliser pour chaque membre du groupe
+Given une demande de journalisation de clôture pour chaque membre du groupe
+When l'adaptateur la traite
+Then un log est émis pour chaque membre, y compris les membres dont le score est nul
 
 **Notes**
 - Les règles métier sont définies dans l'issue domaine.
-- Le canal de notification et les garanties de livraison ne sont pas définis par la demande.
+- Aucun canal de notification n'est implémenté dans cette fonctionnalité ; le log ne constitue pas une notification.

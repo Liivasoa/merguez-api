@@ -25,6 +25,7 @@ record SessionOccurrenceDocument(
         @Id String id, String groupId, String scheduleId, String status, Date startedAt, String startedAtExact) {
 
     static final String IN_PROGRESS_STATUS = "IN_PROGRESS";
+    static final String CLOSED_STATUS = "CLOSED";
 
     static SessionOccurrenceDocument from(SessionOccurrence occurrence) {
         return new SessionOccurrenceDocument(

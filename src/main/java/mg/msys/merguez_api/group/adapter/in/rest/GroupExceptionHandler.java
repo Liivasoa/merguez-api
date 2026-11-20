@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
+import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 
@@ -39,5 +40,11 @@ class GroupExceptionHandler {
                 : HttpStatus.BAD_REQUEST;
         log.debug("Round request refused", ex);
         return ProblemDetail.forStatusAndDetail(status, "The round request was refused.");
+    }
+
+    @ExceptionHandler(SessionClosureRefusedException.class)
+    ProblemDetail handleSessionClosureRefused(SessionClosureRefusedException ex) {
+        log.debug("Session closure refused", ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The session closure request was refused.");
     }
 }
