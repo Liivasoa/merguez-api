@@ -3,6 +3,7 @@ package mg.msys.merguez_api.group.application.usecase;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -88,6 +90,65 @@ class CloseSessionUseCaseTest {
         InOrder order = inOrder(fixture.persistence, fixture.logger);
         order.verify(fixture.persistence).save(fixture.occurrence);
         order.verify(fixture.logger).log(any(), any());
+    }
+
+    @Test
+    void refusesToCloseDifferentScheduledSessionWithoutChangingActiveOccurrence() {
+        UserId admin = userId();
+        UserId member = userId();
+        Group group = spy(Group.create("Training", admin, List.of(member)));
+        Session activeSession = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        Session requestedSession = group.createSession(admin, "Later practice", DayOfWeek.WEDNESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, activeSession);
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+        Round round = group.addRound(admin, occurrence, List.of(combat));
+        Combat result = new Combat(combat.participants(), Optional.of(admin));
+        Round closedRound = group.closeRound(admin, round, List.of(result));
+        var sessions = group.sessions();
+        var members = group.members();
+        var activeOccurrences = group.activeOccurrences();
+        var rounds = group.rounds(occurrence);
+        Instant startedAt = occurrence.startedAt();
+        LoadGroupWithActiveOccurrencePort loader = mock(LoadGroupWithActiveOccurrencePort.class);
+        GroupRepository groups = mock(GroupRepository.class);
+        SaveClosedSessionOccurrencePort persistence = mock(SaveClosedSessionOccurrencePort.class);
+        LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        CloseSessionUseCase useCase = new CloseSessionUseCase(loader, groups, persistence, logger);
+        when(loader.loadByGroupId(group.id())).thenReturn(Optional.of(group));
+
+        assertEquals(group.id(), activeSession.groupId());
+        assertEquals(group.id(), requestedSession.groupId());
+        assertNotEquals(activeSession.id(), requestedSession.id());
+        assertEquals(activeSession.id(), occurrence.scheduleId());
+        assertEquals(List.of(activeSession, requestedSession), sessions);
+        assertEquals(List.of(occurrence), activeOccurrences);
+        assertEquals(List.of(closedRound), rounds);
+        assertEquals(RoundStatus.CLOSED, closedRound.status());
+        assertEquals(List.of(result), closedRound.combats());
+        assertTrue(occurrence.isStarted());
+        assertFalse(occurrence.isClosed());
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> useCase.execute(new CloseSessionCommand(group.id(), admin, requestedSession.id())));
+
+        assertTrue(thrown.getMessage().toLowerCase(java.util.Locale.ROOT).contains("session"));
+        assertTrue(thrown.getMessage().toLowerCase(java.util.Locale.ROOT).contains("active"));
+        verify(loader).loadByGroupId(group.id());
+        verify(group, never()).closeSession(nullable(UserId.class), nullable(SessionOccurrence.class));
+        assertAll(
+                () -> assertEquals(sessions, group.sessions()),
+                () -> assertEquals(members, group.members()),
+                () -> assertEquals(activeOccurrences, group.activeOccurrences()),
+                () -> assertSame(occurrence, group.activeOccurrences().getFirst()),
+                () -> assertEquals(rounds, group.rounds(occurrence)),
+                () -> assertEquals(RoundStatus.CLOSED, closedRound.status()),
+                () -> assertEquals(List.of(result), closedRound.combats()),
+                () -> assertEquals(group.id(), occurrence.groupId()),
+                () -> assertEquals(activeSession.id(), occurrence.scheduleId()),
+                () -> assertEquals(startedAt, occurrence.startedAt()),
+                () -> assertTrue(occurrence.isStarted()),
+                () -> assertFalse(occurrence.isClosed()));
+        verifyNoInteractions(persistence, logger);
     }
 
     @Test
@@ -189,7 +250,7 @@ class CloseSessionUseCaseTest {
         }
 
         SessionClosureResult close() {
-            return useCase.execute(new CloseSessionCommand(group.id(), admin));
+            return useCase.execute(new CloseSessionCommand(group.id(), admin, session.id()));
         }
     }
 
@@ -224,7 +285,7 @@ class CloseSessionUseCaseTest {
         }
 
         SessionClosureResult close(UserId requester) {
-            return useCase.execute(new CloseSessionCommand(group.id(), requester));
+            return useCase.execute(new CloseSessionCommand(group.id(), requester, session.id()));
         }
 
         void assertSuccessfulClosure(UserId requester) {
