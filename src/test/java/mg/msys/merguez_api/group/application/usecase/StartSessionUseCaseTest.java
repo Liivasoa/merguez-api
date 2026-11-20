@@ -470,6 +470,15 @@ class StartSessionUseCaseTest {
         }
 
         @Override
+        public void replace(Round expected, Round updated) {
+            int index = savedRounds.indexOf(expected);
+            if (index < 0) {
+                throw new IllegalStateException("Round was changed");
+            }
+            savedRounds.set(index, updated);
+        }
+
+        @Override
         public void save(Round round) {
             savedRounds.add(new Round(round.occurrence(), round.number(), round.status(), round.combats()));
         }

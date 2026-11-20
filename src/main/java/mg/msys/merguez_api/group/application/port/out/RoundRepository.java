@@ -15,4 +15,9 @@ public interface RoundRepository {
      * same occurrence and number already exists, it is replaced.
      */
     void save(Round round);
+
+    /**
+     * Replaces the round only if the stored state still matches the expected state.
+     */
+    void replace(Round expected, Round updated);
 }

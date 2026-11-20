@@ -9,6 +9,7 @@ import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
+import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
@@ -16,6 +17,13 @@ import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
 
 @Configuration
 public class GroupConfiguration {
+
+    @Bean
+    CloseRoundUseCase closeRoundUseCase(
+            LoadGroupWithActiveOccurrencePort groupLoader,
+            RoundRepository roundRepository) {
+        return new CloseRoundUseCase(groupLoader, roundRepository);
+    }
 
     @Bean
     AddRoundUseCase addRoundUseCase(

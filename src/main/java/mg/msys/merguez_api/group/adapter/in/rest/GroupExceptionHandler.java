@@ -1,5 +1,7 @@
 package mg.msys.merguez_api.group.adapter.in.rest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -12,6 +14,8 @@ import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 
 @RestControllerAdvice(assignableTypes = GroupController.class)
 class GroupExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GroupExceptionHandler.class);
 
     @ExceptionHandler(GroupNotFoundException.class)
     ProblemDetail handleGroupNotFound() {
@@ -33,9 +37,7 @@ class GroupExceptionHandler {
         HttpStatus status = ex.getCause() instanceof IllegalStateException
                 ? HttpStatus.CONFLICT
                 : HttpStatus.BAD_REQUEST;
-        String detail = ex.getCause() != null
-                ? ex.getCause().getMessage()
-                : "The round request was refused.";
-        return ProblemDetail.forStatusAndDetail(status, detail);
+        log.debug("Round request refused", ex);
+        return ProblemDetail.forStatusAndDetail(status, "The round request was refused.");
     }
 }

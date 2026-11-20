@@ -45,6 +45,21 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
     }
 
     @Override
+    public void replace(Round expected, Round updated) {
+        if (!expected.occurrence().equals(updated.occurrence()) || expected.number() != updated.number()) {
+            throw new IllegalArgumentException("Replacement must identify the same round");
+        }
+        String path = "rounds." + expected.number();
+        Document filter = occurrenceFilter(expected.occurrence()).append(path, toStoredRound(expected));
+        var result = mongoTemplate.getCollection("session-occurrences").updateOne(
+                filter, new Document("$set", new Document(path, toStoredRound(updated))));
+        if (result.getMatchedCount() == 0) {
+            throw new RoundOperationRefusedException(
+                    new IllegalStateException("Round was changed or the active session is no longer available"));
+        }
+    }
+
+    @Override
     public void create(Round round) {
         Document rounds = new Document("$objectToArray",
                 new Document("$ifNull", List.of("$rounds", new Document())));

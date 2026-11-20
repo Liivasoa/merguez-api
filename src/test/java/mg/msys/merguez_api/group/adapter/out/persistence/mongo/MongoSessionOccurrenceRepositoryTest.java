@@ -60,6 +60,7 @@ import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepositor
 import mg.msys.merguez_api.group.application.command.AddRoundCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
+import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
@@ -189,6 +190,71 @@ class MongoSessionOccurrenceRepositoryTest {
         Group restoredAfterReplacement = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
         assertEquals(List.of(occurrence), restoredAfterReplacement.activeOccurrences());
         assertEquals(List.of(replacement), restoredAfterReplacement.rounds(occurrence));
+    }
+
+    @Test
+    void closesRoundAtomicallyAndRejectsStaleUpdates() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId first = new UserId(UUID.randomUUID());
+        UserId second = new UserId(UUID.randomUUID());
+        UserId third = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(first, second, third));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = new SessionOccurrence(group.id(), session.id(), Instant.now());
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        Round initial = new Round(occurrence, 1, List.of(
+                new Combat(List.of(admin, first), Optional.empty()),
+                new Combat(List.of(second, third), Optional.of(third))));
+        roundRepository.create(initial);
+        Round closed = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, first), Optional.of(first)),
+                new Combat(List.of(second, third), Optional.empty())));
+
+        roundRepository.replace(initial, closed);
+        assertEquals(List.of(closed),
+                activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().rounds(occurrence));
+        assertThrows(RoundOperationRefusedException.class, () -> roundRepository.replace(initial, initial));
+        assertEquals(List.of(closed),
+                activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().rounds(occurrence));
+    }
+
+    @Test
+    void closeEndpointPersistsResultsAndAllowsNextRound() throws Exception {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = new SessionOccurrence(group.id(), session.id(), Instant.now());
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        Round initial = new Round(occurrence, 1, List.of(
+                new Combat(List.of(admin, member), Optional.empty())));
+        roundRepository.create(initial);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new GroupController(
+                mock(CreateGroupUseCase.class),
+                mock(CreateSessionUseCase.class),
+                mock(GetGroupSessionsUseCase.class),
+                mock(StartSessionUseCase.class),
+                new AddRoundUseCase(activeOccurrenceLoader, roundRepository),
+                null,
+                new CloseRoundUseCase(activeOccurrenceLoader, roundRepository))).build();
+
+        mvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", group.id().value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"requesterId":"%s","combats":[{"participantIds":["%s","%s"],"winnerId":"%s"}]}
+                        """.formatted(admin.value(), admin.value(), member.value(), member.value())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CLOSED"))
+                .andExpect(jsonPath("$.combats[0].winnerId").value(member.value().toString()));
+
+        Round stored = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().rounds(occurrence).getFirst();
+        assertEquals(RoundStatus.CLOSED, stored.status());
+        assertEquals(Optional.of(member), stored.combats().getFirst().winner());
+        Round next = new AddRoundUseCase(activeOccurrenceLoader, roundRepository).execute(
+                new AddRoundCommand(group.id(), admin, List.of(initial.combats().getFirst())));
+        assertEquals(2, next.number());
     }
 
     @Test

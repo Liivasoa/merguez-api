@@ -37,7 +37,7 @@ public final class AddCombatUseCase {
         } catch (IllegalArgumentException | IllegalStateException exception) {
             throw new RoundOperationRefusedException(exception);
         }
-        roundRepository.save(updatedRound);
+        roundRepository.replace(round, updatedRound);
         return updatedRound;
     }
 }

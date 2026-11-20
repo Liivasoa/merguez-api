@@ -42,7 +42,7 @@ public record CreateRoundRequest(
             return winnerId == null || participantIds == null || participantIds.contains(winnerId);
         }
 
-        private Combat toCombat() {
+        public Combat toCombat() {
             return new Combat(
                     participantIds.stream().map(UserId::new).toList(),
                     Optional.ofNullable(winnerId).map(UserId::new));

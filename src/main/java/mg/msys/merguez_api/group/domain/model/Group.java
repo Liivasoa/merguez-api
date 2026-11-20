@@ -181,6 +181,9 @@ public final class Group {
         if (roundIndex < 0) {
             throw new IllegalArgumentException("Round must belong to this group");
         }
+        if (round.status() == RoundStatus.CLOSED) {
+            throw new IllegalStateException("Round is closed");
+        }
         if (!combat.participants().stream().allMatch(this::isMemberOrAdmin)) {
             throw new IllegalArgumentException("Combat participants must belong to this group");
         }
@@ -195,6 +198,39 @@ public final class Group {
         Round updatedRound = new Round(round.occurrence(), round.number(), round.status(), updatedCombats);
         rounds.set(roundIndex, updatedRound);
         return updatedRound;
+    }
+
+    public Round closeRound(UserId requester, Round round, List<Combat> results) {
+        if (!isMemberOrAdmin(requester)) {
+            throw new GroupAccessDeniedException("Only group members can close rounds");
+        }
+        if (round == null || !activeOccurrences.contains(round.occurrence())) {
+            throw new IllegalStateException("Session occurrence must be in progress");
+        }
+        List<Round> rounds = roundsByOccurrence.get(round.occurrence());
+        int index = rounds == null ? -1 : rounds.indexOf(round);
+        if (index < 0) {
+            throw new IllegalArgumentException("Round must belong to this group");
+        }
+        if (round.status() != RoundStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Round must be in progress");
+        }
+        if (results == null || results.size() != round.combats().size() || results.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("Results must match all round combats");
+        }
+        List<Combat> updated = new ArrayList<>();
+        for (Combat existing : round.combats()) {
+            List<Combat> matches = results.stream()
+                    .filter(result -> result.participants().containsAll(existing.participants()))
+                    .toList();
+            if (matches.size() != 1) {
+                throw new IllegalArgumentException("Results must match all round combats");
+            }
+            updated.add(new Combat(existing.participants(), matches.getFirst().winner()));
+        }
+        Round closed = new Round(round.occurrence(), round.number(), RoundStatus.CLOSED, updated);
+        rounds.set(index, closed);
+        return closed;
     }
 
     public List<SessionOccurrence> activeOccurrences() {

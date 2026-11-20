@@ -50,6 +50,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import mg.msys.merguez_api.group.application.command.AddRoundCommand;
 import mg.msys.merguez_api.group.application.command.AddCombatCommand;
+import mg.msys.merguez_api.group.application.command.CloseRoundCommand;
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
@@ -57,6 +58,7 @@ import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedExce
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
+import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
@@ -67,6 +69,7 @@ import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.Round;
+import mg.msys.merguez_api.group.domain.model.RoundStatus;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
@@ -94,6 +97,60 @@ class GroupControllerTest {
 
     @MockitoBean
     private AddCombatUseCase addCombatUseCase;
+
+    @MockitoBean
+    private CloseRoundUseCase closeRoundUseCase;
+
+    @Test
+    void closesRoundAndReturnsOptionalWinners() throws Exception {
+        GroupId groupId = GroupId.random();
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Combat combat = new Combat(List.of(requester, member), Optional.of(member));
+        Round closed = new Round(new SessionOccurrence(groupId, UUID.randomUUID(), Instant.now()),
+                1, RoundStatus.CLOSED, List.of(combat));
+        when(closeRoundUseCase.execute(any(CloseRoundCommand.class))).thenReturn(closed);
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", groupId.value())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"requesterId":"%s","combats":[{"participantIds":["%s","%s"],"winnerId":"%s"}]}
+                        """.formatted(requester.value(), requester.value(), member.value(), member.value())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CLOSED"))
+                .andExpect(jsonPath("$.combats[0].winnerId").value(member.value().toString()));
+
+        verify(closeRoundUseCase).execute(new CloseRoundCommand(groupId, requester, 1, List.of(combat)));
+    }
+
+    @Test
+    void rejectsWinnerOutsideCombatBeforeCallingUseCase() throws Exception {
+        UUID groupId = UUID.randomUUID();
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", groupId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"requesterId":"%s","combats":[{"participantIds":["%s","%s"],"winnerId":"%s"}]}
+                        """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(closeRoundUseCase);
+    }
+
+    @Test
+    void closeRoundDoesNotExposeInternalRefusalDetails() throws Exception {
+        UUID groupId = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        UUID member = UUID.randomUUID();
+        when(closeRoundUseCase.execute(any(CloseRoundCommand.class)))
+                .thenThrow(new RoundOperationRefusedException(new IllegalStateException("private diagnostic")));
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", groupId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"requesterId":"%s","combats":[{"participantIds":["%s","%s"]}]}
+                        """.formatted(requester, requester, member)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("The round request was refused."));
+    }
 
     @Test
     @DisplayName("POST a scheduled session start forwards its identifiers and returns the recorded occurrence")

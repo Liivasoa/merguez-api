@@ -157,7 +157,7 @@ class AddCombatUseCaseTest {
         Scenario scenario = scenario();
         IllegalStateException repositoryFailure = new IllegalStateException("Round storage is unavailable");
         RoundRepository failingRepository = mock(RoundRepository.class);
-        doThrow(repositoryFailure).when(failingRepository).save(any(Round.class));
+        doThrow(repositoryFailure).when(failingRepository).replace(any(Round.class), any(Round.class));
         AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), failingRepository);
         Combat availableCombat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
@@ -328,6 +328,14 @@ class AddCombatUseCaseTest {
         @Override
         public void create(Round round) {
             save(round);
+        }
+
+        @Override
+        public void replace(Round expected, Round updated) {
+            if (!persistedRounds.contains(expected)) {
+                throw new IllegalStateException("Round was changed");
+            }
+            save(updated);
         }
 
         @Override

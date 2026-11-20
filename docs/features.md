@@ -43,6 +43,14 @@ Règles :
 - Un membre ne doit figurer que dans un seul combat pour un round donné
 - Un combat doit avoir un membre gagnant ou non
 
+### En tant qu'admin ou membre d'un groupe, je veux clôturer un round
+
+Règles :
+- Un round en cours passe au statut `CLOSED`.
+- Les résultats indiquent un vainqueur ou aucun vainqueur pour chaque combat du round.
+- Le vainqueur éventuel doit participer au combat.
+- Un round clôturé ne peut plus recevoir de combat et un nouveau round peut être créé.
+
 ### En tant qu'admin ou membre d'un groupe, je veux clôturer une séance
 
 Règles :
