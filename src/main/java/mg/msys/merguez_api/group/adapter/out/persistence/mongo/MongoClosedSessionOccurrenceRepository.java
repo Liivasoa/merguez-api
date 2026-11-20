@@ -1,5 +1,7 @@
 package mg.msys.merguez_api.group.adapter.out.persistence.mongo;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.bson.Document;
@@ -29,28 +31,47 @@ class MongoClosedSessionOccurrenceRepository implements SaveClosedSessionOccurre
             throw new IllegalStateException("Session closure conflicts with the loaded rounds");
         }
         Document filter = MongoSessionOccurrenceFilters.occurrenceFilter(occurrence);
-        Document storedRounds = new Document("$objectToArray",
-                new Document("$ifNull", List.of("$rounds", new Document())));
-        filter.append("$expr", new Document("$eq", List.of(new Document("$size", storedRounds), rounds.size())));
+        List<Object> roundChecks = new ArrayList<>();
+        roundChecks.add(equal(new Document("$size", new Document("$objectToArray", "$rounds")), rounds.size()));
         for (Round round : rounds) {
-            String path = "rounds." + round.number();
-            filter.append(path + ".number", round.number())
-                    .append(path + ".status", round.status().name())
-                    .append(path + ".combats", new Document("$size", round.combats().size()));
+            List<Object> combatChecks = new ArrayList<>();
+            combatChecks.add(equal(new Document("$size", "$$round.combats"), round.combats().size()));
             for (int i = 0; i < round.combats().size(); i++) {
                 Combat combat = round.combats().get(i);
-                String combatPath = path + ".combats." + i;
-                filter.append(combatPath + ".participants", combat.participants().stream()
-                                .map(user -> user.value().toString()).toList())
-                        .append(combatPath + ".winner",
-                                combat.winner().map(user -> user.value().toString()).orElse(null));
+                Document combatMatches = new Document("$and", List.of(
+                        equal("$$combat.participants", combat.participants().stream()
+                                .map(user -> user.value().toString()).toList()),
+                        equal(new Document("$ifNull", Arrays.asList("$$combat.winner", null)),
+                                combat.winner().map(user -> user.value().toString()).orElse(null))));
+                combatChecks.add(new Document("$let", new Document("vars", new Document("combat",
+                        new Document("$arrayElemAt", List.of("$$round.combats", i))))
+                        .append("in", ifType("$$combat", "object", combatMatches))));
             }
+            Document roundMatches = new Document("$and", List.of(
+                    ifType("$$round.number", "int", equal("$$round.number", round.number())),
+                    equal("$$round.status", round.status().name()),
+                    ifType("$$round.combats", "array", new Document("$and", combatChecks))));
+            roundChecks.add(new Document("$let", new Document("vars", new Document("round",
+                    "$rounds." + round.number()))
+                    .append("in", ifType("$$round", "object", roundMatches))));
         }
+        filter.append("$expr", ifType("$rounds", "object", new Document("$and", roundChecks)));
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
                 filter,
                 new Document("$set", new Document("status", SessionOccurrenceDocument.CLOSED_STATUS)));
         if (result.getMatchedCount() == 0) {
             throw new IllegalStateException("Session closure conflicts with changed rounds or active occurrence");
         }
+    }
+
+    private static Document equal(Object expression, Object expected) {
+        return new Document("$eq", Arrays.asList(expression, new Document("$literal", expected)));
+    }
+
+    private static Document ifType(Object expression, String type, Object whenTrue) {
+        return new Document("$cond", List.of(
+                new Document("$eq", List.of(new Document("$type", expression), type)),
+                whenTrue,
+                false));
     }
 }
