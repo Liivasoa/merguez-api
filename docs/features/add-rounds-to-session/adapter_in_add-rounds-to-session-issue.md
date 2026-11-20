@@ -7,12 +7,12 @@ Exposer l’ajout d’un round et de combats à une séance par l’adaptateur R
 Feature: ajouter des rounds à une séance en cours (adaptateur entrant)
 
 1. Transmettre une demande valide de création de round
-Ref Domain: D1, D3, D4, D5, D9
+Ref Domain: D1, D3, D4, D5, D9, D11
 Scenario: l’adaptateur transmet les combats initiaux et expose le round créé
 Given une requête REST de création d’un round contenant au moins un combat de deux membres
 When l’adaptateur entrant traite la requête
 Then il transmet à l’application les identifiants de la séance et des membres ainsi que le gagnant éventuel
-And il expose le résultat du cas d’utilisation, notamment le numéro du round attribué et ses combats
+And il expose le résultat du cas d’utilisation, notamment le numéro du round attribué, son statut et ses combats
 
 2. Transmettre une demande d’ajout de combat à un round
 Ref Domain: D6, D7, D8
@@ -23,9 +23,9 @@ Then il transmet l’identifiant du round et les membres du combat à l’applic
 And il expose soit le résultat du round mis à jour, soit le refus renvoyé par l’application
 
 3. Exposer le refus d’une demande invalide
-Ref Domain: D2, D4, D5, D6, D8
+Ref Domain: D2, D4, D5, D6, D8, D10
 Scenario: une séance ou une composition de combat refusée ne produit pas de réponse de succès
-Given une demande que le domaine refuse parce que la séance n’est pas en cours ou que les invariants du round ne sont pas respectés
+Given une demande que le domaine refuse parce que la séance n’est pas en cours, qu’un round du groupe est déjà en cours ou que les invariants du round ne sont pas respectés
 When l’adaptateur entrant reçoit le refus du cas d’utilisation
 Then il expose ce refus à l’appelant
 And il ne retourne pas un résultat de création ou de mise à jour réussi

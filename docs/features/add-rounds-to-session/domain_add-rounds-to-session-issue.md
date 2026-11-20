@@ -1,13 +1,16 @@
 # Ajouter des rounds à une séance : impact sur le module de domaine
 
 **Contexte**
-En tant qu’administrateur ou membre d’un groupe, je veux ajouter des rounds à une séance en cours pour y organiser les combats entre les membres du groupe. Le domaine garantit l’état requis de la séance, la numérotation des rounds et la composition des combats.
+En tant qu’administrateur ou membre d’un groupe, je veux ajouter des rounds à une séance en cours pour y organiser les combats entre les membres du groupe. Le domaine garantit l’état requis de la séance, le statut et la numérotation des rounds, et la composition des combats.
 
 **Couverture des règles**
 | Règle | Scénarios |
 |---|---|
 | Seule une séance en cours accepte des rounds | D1, D2 |
 | Le premier round porte le numéro 1 et les suivants s’incrémentent | D3 |
+| Un round possède un statut et démarre en cours | D1 |
+| Un groupe ne peut pas démarrer un nouveau round tant qu’un de ses rounds est en cours | D3, D10 |
+| Un round en cours dans un groupe ne bloque pas un autre groupe | D11 |
 | Un round est créé avec au moins un combat | D1, D4 |
 | Les combats réunissent exactement deux membres | D1, D5 |
 | Un membre ne participe qu’à un combat par round | D6 |
@@ -26,6 +29,7 @@ When l’utilisateur ajoute un round contenant un combat entre ces deux membres,
 Then le round est créé pour la séance
 And il contient au moins ce combat composé exactement de ces deux membres
 And le combat est conservé sans gagnant
+And son statut est en cours
 
 2. Refuser l’ajout d’un round si la séance n’est pas en cours (D2)
 Scenario: une séance qui n’est pas en cours ne peut pas recevoir de round
@@ -36,10 +40,11 @@ And aucun round n’est ajouté à cette séance
 
 3. Numéroter les rounds à partir de 1 et incrémenter le numéro (D3)
 Scenario: les rounds d’une séance reçoivent des numéros successifs
-Given une séance en cours sans round
-When un membre du groupe ajoute deux rounds valides successivement
-Then le premier round porte le numéro 1
-And le deuxième round porte le numéro 2
+Given une séance en cours dont le premier round porte le numéro 1 et n’est plus en cours
+And aucun autre round du groupe n’est en cours
+When un membre du groupe ajoute un nouveau round valide
+Then le nouveau round porte le numéro 2
+And son statut est en cours
 
 4. Refuser la création d’un round sans combat (D4)
 Scenario: un round ne peut pas être créé sans combat initial
@@ -84,5 +89,23 @@ When un membre du groupe ajoute un combat entre ces deux membres en désignant l
 Then le combat est ajouté au round
 And le gagnant désigné est associé à ce combat
 
+10. Refuser un nouveau round lorsqu’un round du groupe est en cours (D10)
+Scenario: un groupe ne peut pas démarrer deux rounds en même temps
+Given une séance en cours et un round de ce groupe dont le statut est en cours
+When un administrateur ou un membre tente d’ajouter un autre round valide
+Then l’ajout du nouveau round est refusé
+And le round existant reste inchangé
+And aucun autre round n’est ajouté
+
+11. Ne pas bloquer un autre groupe (D11)
+Scenario: un round en cours dans un groupe ne bloque pas un autre groupe
+Given un premier groupe ayant un round en cours
+And un second groupe ayant une séance en cours sans round en cours
+When un membre du second groupe ajoute un round valide à sa séance
+Then le round du second groupe est créé avec le statut en cours
+And le round du premier groupe reste inchangé
+
 **Notes**
 - Le numéro des rounds est propre à chaque séance et repart à 1 pour une nouvelle séance.
+- La liste complète des statuts, les conditions et le mécanisme de fin d’un round ne sont pas définis dans cette issue.
+- Le traitement des rounds déjà enregistrés sans statut n’est pas défini.
