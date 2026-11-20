@@ -15,9 +15,9 @@ Then elle transmet les informations nécessaires au cas d'utilisation
 And elle retourne le résultat de la clôture
 
 2. Exposer un refus de clôture
-Ref Domain: D3, D4
+Ref Domain: D3, D4, D8
 Scenario: Recevoir une demande refusée par le domaine
-Given une demande de clôture d'une séance qui n'est pas en cours ou ne contient aucun round
+Given une demande de clôture d'une séance qui n'est pas en cours, ne contient aucun round ou contient un round non clôturé
 When le cas d'utilisation refuse la clôture
 Then l'API retourne un refus sans exposer de détails internes
 
