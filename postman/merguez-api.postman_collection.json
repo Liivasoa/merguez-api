@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7b1f2c4e-3a5d-4e8b-9c1a-5e2d0a0f0001",
     "name": "Merguez API",
-    "description": "Importez cette collection dans Postman et ajustez baseUrl si nécessaire. Exécutez Créer un groupe, Créer une session, Lister les sessions du groupe, Démarrer une session, Créer une manche, Ajouter un combat à une manche, puis Clôturer une manche. La création du groupe inclut six membres, administrateur compris. Créez un nouveau groupe pour recommencer le parcours.",
+    "description": "Importez cette collection dans Postman et ajustez baseUrl si nécessaire. Exécutez les requêtes dans l’ordre du parcours ; clôturez une session après avoir clôturé toutes ses manches. La création du groupe inclut six membres, administrateur compris. Créez un nouveau groupe pour recommencer le parcours.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -685,6 +685,49 @@
                   "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds/{{roundNumber}}/close",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "v1", "groups", "{{groupId}}", "rounds", "{{roundNumber}}", "close"]
+                }
+              }
+            },
+            {
+              "name": "Clôturer une session",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 200 OK', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Session closure returns scores and payments', function () {",
+                      "    const result = pm.response.json();",
+                      "    pm.expect(result.occurrence.groupId).to.equal(pm.variables.get('groupId'));",
+                      "    pm.expect(result.occurrence.scheduleId).to.equal(pm.variables.get('sessionId'));",
+                      "    pm.expect(result.occurrence.startedAt).to.be.a('string').and.not.empty;",
+                      "    pm.expect(result.netScores).to.be.an('object');",
+                      "    pm.expect(result.payments).to.be.an('array');",
+                      "    result.payments.forEach(function (payment) {",
+                      "        pm.expect(payment.debtorId).to.be.a('string').and.not.empty;",
+                      "        pm.expect(payment.creditorId).to.be.a('string').and.not.empty;",
+                      "        pm.expect(payment.amount).to.be.a('number').and.above(0);",
+                      "    });",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/json"}],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{participantId}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/{{sessionId}}/close",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions", "{{sessionId}}", "close"]
                 }
               }
             }
