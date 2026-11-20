@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
+import mg.msys.merguez_api.group.application.exception.SessionClosureConflictException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
@@ -52,7 +53,11 @@ public final class CloseSessionUseCase {
         } catch (SessionClosureRejectedException ex) {
             throw new SessionClosureRefusedException(ex);
         }
-        occurrenceSaver.save(result.occurrence(), rounds);
+        try {
+            occurrenceSaver.save(result.occurrence(), rounds);
+        } catch (SessionClosureConflictException ex) {
+            throw new SessionClosureRefusedException(ex);
+        }
         result.netScores().keySet().forEach(member -> closureLogger.log(member, result));
         return result;
     }
