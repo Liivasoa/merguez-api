@@ -33,6 +33,9 @@ class GroupExceptionHandler {
         HttpStatus status = ex.getCause() instanceof IllegalStateException
                 ? HttpStatus.CONFLICT
                 : HttpStatus.BAD_REQUEST;
-        return ProblemDetail.forStatusAndDetail(status, "The round request was refused.");
+        String detail = ex.getCause() != null
+                ? ex.getCause().getMessage()
+                : "The round request was refused.";
+        return ProblemDetail.forStatusAndDetail(status, detail);
     }
 }

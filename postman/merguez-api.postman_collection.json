@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7b1f2c4e-3a5d-4e8b-9c1a-5e2d0a0f0001",
     "name": "Merguez API",
-    "description": "Requests for the Merguez API. Import this file into Postman, then adjust the baseUrl collection variable if needed. Run Create group, Create session, and List group sessions in order to populate groupId and sessionId before starting a session. Create a new group before rerunning successful session creation requests with the same schedule.",
+    "description": "Importez cette collection dans Postman et ajustez baseUrl si nécessaire. Exécutez Créer un groupe, Créer une session, Lister les sessions du groupe, Démarrer une session, Créer une manche, puis Ajouter un combat à une manche. La création du groupe inclut les quatre personnes nécessaires aux deux combats. Créez un nouveau groupe pour recommencer le parcours.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -22,6 +22,16 @@
       "type": "string"
     },
     {
+      "key": "participant2Id",
+      "value": "33333333-3333-3333-3333-333333333333",
+      "type": "string"
+    },
+    {
+      "key": "participant3Id",
+      "value": "44444444-4444-4444-4444-444444444444",
+      "type": "string"
+    },
+    {
       "key": "groupId",
       "value": "",
       "type": "string"
@@ -30,14 +40,19 @@
       "key": "sessionId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "roundNumber",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
     {
-      "name": "Groups",
+      "name": "Groupes",
       "item": [
         {
-          "name": "Create group",
+          "name": "Créer un groupe",
           "event": [
             {
               "listen": "test",
@@ -59,6 +74,8 @@
                   "    });",
                   "    if (typeof group.id === 'string' && group.id.length > 0) {",
                   "        pm.collectionVariables.set('groupId', group.id);",
+                  "        pm.collectionVariables.unset('sessionId');",
+                  "        pm.collectionVariables.unset('roundNumber');",
                   "    }",
                   "}"
                 ]
@@ -75,7 +92,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"creatorId\": \"{{creatorId}}\",\n  \"name\": \"Séance du samedi\",\n  \"description\": \"Groupe de travail\",\n  \"participantIds\": [\"{{participantId}}\"]\n}"
+              "raw": "{\n  \"creatorId\": \"{{creatorId}}\",\n  \"name\": \"Séance du samedi\",\n  \"description\": \"Groupe de travail\",\n  \"participantIds\": [\"{{participantId}}\", \"{{participant2Id}}\", \"{{participant3Id}}\"]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/groups",
@@ -85,7 +102,7 @@
           }
         },
         {
-          "name": "Create group - without description",
+          "name": "Créer un groupe - sans description",
           "event": [
             {
               "listen": "test",
@@ -119,7 +136,7 @@
           }
         },
         {
-          "name": "Create group - missing creatorId (400)",
+          "name": "Créer un groupe - créateur manquant (400)",
           "event": [
             {
               "listen": "test",
@@ -157,7 +174,7 @@
           }
         },
         {
-          "name": "Create group - blank name (400)",
+          "name": "Créer un groupe - nom vide (400)",
           "event": [
             {
               "listen": "test",
@@ -191,7 +208,7 @@
           }
         },
         {
-          "name": "Create group - only the creator as participant (400)",
+          "name": "Créer un groupe - créateur seul participant (400)",
           "event": [
             {
               "listen": "test",
@@ -225,7 +242,7 @@
           }
         },
         {
-          "name": "Create group - empty participants (400)",
+          "name": "Créer un groupe - participants vides (400)",
           "event": [
             {
               "listen": "test",
@@ -265,7 +282,7 @@
           "name": "Sessions",
           "item": [
             {
-              "name": "Create session",
+              "name": "Créer une session",
               "event": [
                 {
                   "listen": "test",
@@ -299,7 +316,7 @@
               }
             },
             {
-              "name": "Create session - generated name",
+              "name": "Créer une session - nom généré",
               "event": [
                 {
                   "listen": "test",
@@ -333,7 +350,7 @@
               }
             },
             {
-              "name": "List group sessions",
+              "name": "Lister les sessions du groupe",
               "event": [
                 {
                   "listen": "test",
@@ -377,7 +394,7 @@
               }
             },
             {
-              "name": "Start session",
+              "name": "Démarrer une session",
               "event": [
                 {
                   "listen": "test",
@@ -418,7 +435,7 @@
               }
             },
             {
-              "name": "Start session - already active (409)",
+              "name": "Démarrer une session - déjà active (409)",
               "event": [
                 {
                   "listen": "test",
@@ -458,7 +475,7 @@
               }
             },
             {
-              "name": "Create session - missing day (400)",
+              "name": "Créer une session - jour manquant (400)",
               "event": [
                 {
                   "listen": "test",
@@ -492,7 +509,7 @@
               }
             },
             {
-              "name": "Create session - missing start time (400)",
+              "name": "Créer une session - heure de début manquante (400)",
               "event": [
                 {
                   "listen": "test",
@@ -522,6 +539,105 @@
                   "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "v1", "groups", "{{groupId}}", "sessions"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manches",
+          "item": [
+            {
+              "name": "Créer une manche",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 201 Created', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "if (pm.response.code === 201) {",
+                      "    const round = pm.response.json();",
+                      "    pm.test('Round contains the requested combat', function () {",
+                      "        pm.expect(round.number).to.be.a('number').and.above(0);",
+                      "        pm.expect(round.combats).to.have.lengthOf(1);",
+                      "        pm.expect(round.combats[0].participantIds).to.deep.equal([pm.variables.get('creatorId'), pm.variables.get('participantId')]);",
+                      "    });",
+                      "    if (Number.isInteger(round.number) && round.number > 0) {",
+                      "        pm.collectionVariables.set('roundNumber', round.number);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{creatorId}}\",\n  \"combats\": [\n    {\n      \"participantIds\": [\"{{creatorId}}\", \"{{participantId}}\"]\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "rounds"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Combats",
+          "item": [
+            {
+              "name": "Ajouter un combat à une manche",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status is 200 OK', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "if (pm.response.code === 200) {",
+                      "    pm.test('Round contains both combats', function () {",
+                      "        const round = pm.response.json();",
+                      "        pm.expect(round.number).to.equal(Number(pm.variables.get('roundNumber')));",
+                      "        pm.expect(round.combats).to.have.lengthOf(2);",
+                      "        pm.expect(round.combats[1].participantIds).to.deep.equal([pm.variables.get('participant2Id'), pm.variables.get('participant3Id')]);",
+                      "    });",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"requesterId\": \"{{creatorId}}\",\n  \"participantIds\": [\"{{participant2Id}}\", \"{{participant3Id}}\"]\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/rounds/{{roundNumber}}/combats",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "rounds", "{{roundNumber}}", "combats"]
                 }
               }
             }
