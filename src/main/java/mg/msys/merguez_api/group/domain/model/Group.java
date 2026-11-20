@@ -264,6 +264,14 @@ public final class Group {
                     netScores.compute(loser, (ignored, score) -> score - 1);
                 }));
 
+        List<SessionPayment> payments = calculatePayments(netScores);
+
+        occurrence.close();
+        activeOccurrences.remove(occurrence);
+        return new SessionClosureResult(occurrence, netScores, payments);
+    }
+
+    private static List<SessionPayment> calculatePayments(Map<UserId, Integer> netScores) {
         List<UserId> creditors = netScores.entrySet().stream()
                 .filter(entry -> entry.getValue() > 0)
                 .map(Map.Entry::getKey)
@@ -285,9 +293,7 @@ public final class Group {
             }
         }
 
-        occurrence.close();
-        activeOccurrences.remove(occurrence);
-        return new SessionClosureResult(occurrence, netScores, payments);
+        return payments;
     }
 
     public List<SessionOccurrence> activeOccurrences() {
