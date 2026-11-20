@@ -38,6 +38,8 @@ import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.mongodb.test.autoconfigure.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -206,6 +208,73 @@ class MongoSessionOccurrenceRepositoryTest {
         assertEquals(List.of(replacement), restoredAfterReplacement.rounds(occurrence));
     }
 
+    @ParameterizedTest(name = "{0}, historical revision: {1}")
+    @CsvSource({"save, false", "save, true", "create, false", "create, true",
+            "replace, false", "replace, true"})
+    void roundWritesPreserveAbsentOrHistoricalRevisionAndOtherOccurrenceData(
+            String operation, boolean historicalRevision) {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+
+        Round previous = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(admin))));
+        Round original = new Round(occurrence, 2, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(admin))));
+        Round updated = new Round(occurrence, 2, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(member))));
+        Document rounds = new Document("1", storedRound(previous));
+        if (operation.equals("replace")) {
+            rounds.put("2", storedRound(original));
+        }
+        Document fields = new Document("rounds", rounds)
+                .append("legacyMetadata", new Document("keep", List.of("old", "data")));
+        if (historicalRevision) {
+            fields.put("roundsRevision", 37L);
+        }
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        Document filter = new Document("groupId", group.id().value().toString());
+        assertEquals(1L, collection.updateOne(filter, new Document("$set", fields)).getModifiedCount());
+        Document before = collection.find(filter).first();
+        assertNotNull(before);
+        assertEquals(historicalRevision, before.containsKey("roundsRevision"));
+
+        switch (operation) {
+            case "save" -> roundRepository.save(updated);
+            case "create" -> roundRepository.create(updated);
+            case "replace" -> roundRepository.replace(original, updated);
+            default -> throw new IllegalArgumentException("Unknown operation: " + operation);
+        }
+
+        Document after = collection.find(filter).first();
+        Document expected = new Document(before);
+        expected.put("rounds", new Document(before.get("rounds", Document.class))
+                .append("2", storedRound(updated)));
+        assertNotNull(after);
+        assertAll(
+                () -> assertEquals(historicalRevision, after.containsKey("roundsRevision"),
+                        "A missing revision must remain absent"),
+                () -> assertEquals(before.get("roundsRevision"), after.get("roundsRevision"),
+                        "A historical revision must remain unchanged"),
+                () -> assertEquals(expected, after, "All other occurrence data must be preserved"),
+                () -> assertEquals(List.of(previous, updated),
+                        activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().rounds(occurrence)));
+    }
+
+    private static Document storedRound(Round round) {
+        return new Document("number", round.number())
+                .append("status", round.status().name())
+                .append("combats", round.combats().stream()
+                        .map(combat -> new Document("participants", combat.participants().stream()
+                                .map(user -> user.value().toString()).toList())
+                                .append("winner", combat.winner().map(user -> user.value().toString()).orElse(null)))
+                        .toList());
+    }
+
     @Test
     void savesAndReloadsClosedOccurrenceWithoutLosingItsRoundsOrActiveSlot() {
         UserId admin = new UserId(UUID.randomUUID());
@@ -318,6 +387,7 @@ class MongoSessionOccurrenceRepositoryTest {
 
         var collection = mongoTemplate.getCollection("session-occurrences");
         Document filter = new Document("groupId", group.id().value().toString());
+        collection.updateOne(filter, new Document("$set", new Document("roundsRevision", 37L)));
         Document before = collection.find(filter).first();
         assertNotNull(before);
         assertNotNull(before.get("roundsRevision"));
@@ -375,11 +445,13 @@ class MongoSessionOccurrenceRepositoryTest {
         occurrenceRepository.save(occurrence);
         Round initial = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
                 new Combat(List.of(admin, member), Optional.of(admin))));
-        roundRepository.save(initial);
         var collection = mongoTemplate.getCollection("session-occurrences");
         Document filter = new Document("groupId", group.id().value().toString());
         if (legacy) {
-            collection.updateOne(filter, new Document("$unset", new Document("roundsRevision", "")));
+            collection.updateOne(filter, new Document("$set", new Document("rounds.1", storedRound(initial))));
+        } else {
+            roundRepository.save(initial);
+            collection.updateOne(filter, new Document("$set", new Document("roundsRevision", 37L)));
         }
         Document before = collection.find(filter).first();
         assertNotNull(before);
@@ -432,12 +504,12 @@ class MongoSessionOccurrenceRepositoryTest {
         SessionOccurrence occurrence = group.startSession(admin, session);
         groupRepository.save(group);
         occurrenceRepository.save(occurrence);
-        roundRepository.save(new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
-                new Combat(List.of(admin, member), Optional.of(admin)))));
+        Round initial = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(admin))));
         var collection = mongoTemplate.getCollection("session-occurrences");
         Document filter = new Document("groupId", group.id().value().toString());
-        collection.updateOne(filter, new Document("$unset", new Document("roundsRevision", ""))
-                .append("$set", new Document("legacyMetadata", new Document("keep", "value"))));
+        collection.updateOne(filter, new Document("$set", new Document("rounds.1", storedRound(initial))
+                .append("legacyMetadata", new Document("keep", "value"))));
         Document before = collection.find(filter).first();
         assertNotNull(before);
         assertFalse(before.containsKey("roundsRevision"));
