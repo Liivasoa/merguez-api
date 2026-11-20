@@ -2,7 +2,6 @@ package mg.msys.merguez_api.group.adapter.out.persistence.mongo;
 
 import java.time.Instant;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -36,7 +35,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
 
     @Override
     public void save(Round round) {
-        Document filter = occurrenceFilter(round.occurrence());
+        Document filter = MongoSessionOccurrenceFilters.occurrenceFilter(round.occurrence());
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
                 filter, new Document("$set", new Document("rounds." + round.number(), toStoredRound(round))));
         if (result.getMatchedCount() == 0) {
@@ -50,7 +49,8 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
             throw new IllegalArgumentException("Replacement must identify the same round");
         }
         String path = "rounds." + expected.number();
-        Document filter = occurrenceFilter(expected.occurrence()).append(path, toStoredRound(expected));
+        Document filter = MongoSessionOccurrenceFilters.occurrenceFilter(expected.occurrence())
+                .append(path, toStoredRound(expected));
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
                 filter, new Document("$set", new Document(path, toStoredRound(updated))));
         if (result.getMatchedCount() == 0) {
@@ -66,7 +66,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
         Document activeRounds = new Document("$filter", new Document("input", rounds)
                 .append("as", "round")
                 .append("cond", new Document("$eq", List.of("$$round.v.status", RoundStatus.IN_PROGRESS.name()))));
-        Document filter = occurrenceFilter(round.occurrence())
+        Document filter = MongoSessionOccurrenceFilters.occurrenceFilter(round.occurrence())
                 .append("rounds." + round.number(), new Document("$exists", false))
                 .append("$expr", new Document("$eq", List.of(new Document("$size", activeRounds), 0)));
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
@@ -75,20 +75,6 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
             throw new RoundOperationRefusedException(
                     new IllegalStateException("Round creation conflicts with the active session state"));
         }
-    }
-
-    static Document occurrenceFilter(SessionOccurrence occurrence) {
-        Document filter = activeOccurrenceFilter(occurrence.groupId())
-                .append("scheduleId", occurrence.scheduleId().toString())
-                .append("startedAt", Date.from(occurrence.startedAt()));
-        if (occurrence.startedAt().equals(Date.from(occurrence.startedAt()).toInstant())) {
-            filter.append("$or", List.of(
-                    new Document("startedAtExact", occurrence.startedAt().toString()),
-                    new Document("startedAtExact", new Document("$exists", false))));
-        } else {
-            filter.append("startedAtExact", occurrence.startedAt().toString());
-        }
-        return filter;
     }
 
     private static Document toStoredRound(Round round) {
@@ -101,7 +87,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
     public Optional<Group> loadByGroupId(GroupId groupId) {
         return groups.findById(groupId.value().toString()).flatMap(group -> {
             Document stored = mongoTemplate.getCollection("session-occurrences")
-                    .find(activeOccurrenceFilter(groupId)).first();
+                    .find(MongoSessionOccurrenceFilters.activeOccurrenceFilter(groupId)).first();
             if (stored == null) {
                 return Optional.empty();
             }
@@ -117,11 +103,6 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
                     .toList();
             return Optional.of(group.toGroup(occurrence, rounds));
         });
-    }
-
-    private static Document activeOccurrenceFilter(GroupId groupId) {
-        return new Document("groupId", groupId.value().toString())
-                .append("status", SessionOccurrenceDocument.IN_PROGRESS_STATUS);
     }
 
     private static Round toRound(Document stored, SessionOccurrence occurrence) {

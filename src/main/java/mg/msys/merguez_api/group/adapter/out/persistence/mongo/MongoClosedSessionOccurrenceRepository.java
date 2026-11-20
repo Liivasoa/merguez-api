@@ -22,7 +22,7 @@ class MongoClosedSessionOccurrenceRepository implements SaveClosedSessionOccurre
             throw new IllegalArgumentException("Session occurrence must be closed");
         }
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
-                MongoRoundRepository.occurrenceFilter(occurrence),
+                MongoSessionOccurrenceFilters.occurrenceFilter(occurrence),
                 new Document("$set", new Document("status", SessionOccurrenceDocument.CLOSED_STATUS)));
         if (result.getMatchedCount() == 0) {
             throw new IllegalStateException("Active session occurrence not found");
