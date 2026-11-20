@@ -35,6 +35,7 @@ import org.testcontainers.mongodb.MongoDBContainer;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
+import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
@@ -64,6 +65,8 @@ class CloseSessionMongoIntegrationTest {
     private MongoTemplate mongoTemplate;
     @MockitoSpyBean
     private LogSessionClosurePort closureLogger;
+    @MockitoSpyBean
+    private SaveClosedSessionOccurrencePort closedOccurrenceSaver;
 
     @Test
     void closesSessionThroughHttpAndPersistsClosedOccurrence() throws Exception {
@@ -141,6 +144,7 @@ class CloseSessionMongoIntegrationTest {
                                 "All rounds must be closed before closing the session")))),
                 () -> assertEquals(groupBefore, groupCollection.find(groupFilter).first()),
                 () -> assertEquals(occurrenceBefore, occurrenceCollection.find(occurrenceFilter).first()),
+                () -> verifyNoInteractions(closedOccurrenceSaver),
                 () -> verifyNoInteractions(closureLogger));
     }
 }
