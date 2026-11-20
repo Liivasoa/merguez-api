@@ -81,6 +81,32 @@ class CloseSessionTest {
     }
 
     @Test
+    void createsNoPaymentsWhenCombatResultsCancelOutOrHaveNoWinner() {
+        UserId a = new UserId(UUID.randomUUID());
+        UserId b = new UserId(UUID.randomUUID());
+        UserId c = new UserId(UUID.randomUUID());
+        UserId d = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", a, List.of(b, c, d));
+        Session session = group.createSession(a, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(a, session);
+
+        Combat ab = new Combat(List.of(a, b), Optional.empty());
+        Combat cd = new Combat(List.of(c, d), Optional.empty());
+        Round firstRound = group.addRound(a, occurrence, List.of(ab, cd));
+        group.closeRound(a, firstRound, List.of(new Combat(ab.participants(), Optional.of(a)), cd));
+        Round secondRound = group.addRound(a, occurrence, List.of(ab));
+        group.closeRound(a, secondRound, List.of(new Combat(ab.participants(), Optional.of(b))));
+        assertEquals(2, group.rounds(occurrence).size());
+        assertTrue(group.rounds(occurrence).stream().allMatch(round -> round.status() == RoundStatus.CLOSED));
+
+        var result = group.closeSession(a, occurrence);
+
+        assertTrue(result.occurrence().isClosed());
+        assertEquals(Map.of(a, 0, b, 0, c, 0, d, 0), result.netScores());
+        assertTrue(result.payments().isEmpty());
+    }
+
+    @Test
     void memberClosesSessionAndCalculatesCombatResult() {
         UserId admin = new UserId(UUID.randomUUID());
         UserId member = new UserId(UUID.randomUUID());
