@@ -239,7 +239,7 @@ public final class Group {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can close sessions");
         }
-        if (occurrence == null || !activeOccurrences.contains(occurrence)) {
+        if (occurrence == null || occurrence.isClosed() || !activeOccurrences.contains(occurrence)) {
             throw new IllegalStateException("Session occurrence must be in progress");
         }
         List<Round> rounds = roundsByOccurrence.get(occurrence);
