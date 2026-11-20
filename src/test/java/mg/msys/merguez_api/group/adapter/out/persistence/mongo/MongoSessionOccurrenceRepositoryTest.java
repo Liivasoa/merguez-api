@@ -23,6 +23,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -56,6 +57,7 @@ import mg.msys.merguez_api.group.adapter.in.rest.GroupController;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
+import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.application.command.AddRoundCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
@@ -82,7 +84,8 @@ import mg.msys.merguez_api.user.domain.model.UserId;
         useDefaultFilters = false,
         includeFilters = @ComponentScan.Filter(
                 type = FilterType.ASSIGNABLE_TYPE,
-                classes = {RoundRepository.class, LoadGroupWithActiveOccurrencePort.class}))
+                classes = {RoundRepository.class, LoadGroupWithActiveOccurrencePort.class,
+                        SaveClosedSessionOccurrencePort.class}))
 class MongoSessionOccurrenceRepositoryTest {
 
     @Container
@@ -100,6 +103,12 @@ class MongoSessionOccurrenceRepositoryTest {
 
     @Autowired(required = false)
     LoadGroupWithActiveOccurrencePort activeOccurrenceLoader;
+
+    @Autowired(required = false)
+    SaveClosedSessionOccurrencePort closedOccurrenceSaver;
+
+    @Autowired
+    SpringDataSessionOccurrenceRepository storedOccurrences;
 
     @Autowired
     MongoTemplate mongoTemplate;
@@ -190,6 +199,63 @@ class MongoSessionOccurrenceRepositoryTest {
         Group restoredAfterReplacement = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
         assertEquals(List.of(occurrence), restoredAfterReplacement.activeOccurrences());
         assertEquals(List.of(replacement), restoredAfterReplacement.rounds(occurrence));
+    }
+
+    @Test
+    void savesAndReloadsClosedOccurrenceWithoutLosingItsRoundsOrActiveSlot() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        Round firstRound = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(admin))));
+        Round secondRound = new Round(occurrence, 2, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.empty())));
+        roundRepository.save(firstRound);
+        roundRepository.save(secondRound);
+
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        Document before = collection.find(new Document("groupId", group.id().value().toString())).first();
+        assertNotNull(before);
+        String id = before.getString("_id");
+        assertNotNull(id);
+        assertTrue(occurrenceRepository.existsStartedByGroupId(group.id()));
+        Group loaded = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+        SessionOccurrence loadedOccurrence = loaded.activeOccurrences().getFirst();
+        assertEquals(List.of(firstRound, secondRound), loaded.rounds(loadedOccurrence));
+        var closure = loaded.closeSession(admin, loadedOccurrence);
+        assertTrue(closure.occurrence().isClosed());
+        assertEquals(Map.of(admin, 1, member, -1), closure.netScores());
+
+        assertNotNull(closedOccurrenceSaver, "A Mongo closed occurrence saver must be available");
+        closedOccurrenceSaver.save(closure.occurrence());
+
+        SessionOccurrenceDocument restored = storedOccurrences.findById(id).orElseThrow();
+        Document after = collection.find(new Document("_id", id)).first();
+        assertNotNull(after);
+        assertAll(
+                () -> assertEquals("CLOSED", restored.status()),
+                () -> assertEquals(id, restored.id()),
+                () -> assertEquals(group.id().value().toString(), restored.groupId()),
+                () -> assertEquals(session.id().toString(), restored.scheduleId()),
+                () -> assertEquals(occurrence.startedAt().toString(), restored.startedAtExact()),
+                () -> assertEquals(before.get("rounds"), after.get("rounds")),
+                () -> assertEquals(1L, collection.countDocuments(new Document("groupId", group.id().value().toString()))),
+                () -> assertFalse(occurrenceRepository.existsStartedByGroupId(group.id())),
+                () -> assertTrue(activeOccurrenceLoader.loadByGroupId(group.id()).isEmpty()));
+
+        SessionOccurrence next = new SessionOccurrence(
+                group.id(), session.id(), occurrence.startedAt().plusSeconds(1));
+        occurrenceRepository.save(next);
+        assertAll(
+                () -> assertTrue(occurrenceRepository.existsStartedByGroupId(group.id())),
+                () -> assertEquals(2L, collection.countDocuments(new Document("groupId", group.id().value().toString()))),
+                () -> assertEquals(after, collection.find(new Document("_id", id)).first()),
+                () -> assertEquals(List.of(next),
+                        activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().activeOccurrences()));
     }
 
     @Test
