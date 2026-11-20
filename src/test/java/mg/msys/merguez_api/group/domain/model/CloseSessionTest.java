@@ -2,6 +2,8 @@ package mg.msys.merguez_api.group.domain.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -205,6 +207,45 @@ class CloseSessionTest {
         assertTrue(group.rounds(activeOccurrence).isEmpty());
         assertEquals(scores, firstResult.netScores());
         assertEquals(payments, firstResult.payments());
+    }
+
+    @Test
+    void refusesToCloseAlreadyClosedOccurrenceEqualToActiveOccurrence() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group original = Group.create("Training", admin, List.of(member));
+        Session session = original.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence closedOccurrence = original.startSession(admin, session);
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+        Round firstRound = original.addRound(admin, closedOccurrence, List.of(combat));
+        Round closedRound = original.closeRound(admin, firstRound,
+                List.of(new Combat(combat.participants(), Optional.of(admin))));
+        var firstResult = original.closeSession(admin, closedOccurrence);
+
+        SessionOccurrence activeOccurrence = new SessionOccurrence(
+                original.id(), session.id(), closedOccurrence.startedAt());
+        Group restored = Group.restore(original.id(), original.name(), null, admin, List.of(member),
+                List.of(session), activeOccurrence, List.of());
+        Round newRound = restored.addRound(admin, activeOccurrence, List.of(combat));
+        Round closedNewRound = restored.closeRound(admin, newRound,
+                List.of(new Combat(combat.participants(), Optional.of(member))));
+        assertNotSame(closedOccurrence, activeOccurrence);
+        assertEquals(closedOccurrence, activeOccurrence);
+        assertTrue(closedOccurrence.isClosed());
+        assertFalse(activeOccurrence.isClosed());
+        assertSame(activeOccurrence, restored.activeOccurrences().getFirst());
+        assertEquals(List.of(closedNewRound), restored.rounds(activeOccurrence));
+
+        assertThrows(IllegalStateException.class, () -> restored.closeSession(member, closedOccurrence));
+
+        assertTrue(closedOccurrence.isClosed());
+        assertFalse(activeOccurrence.isClosed());
+        assertEquals(1, restored.activeOccurrences().size());
+        assertSame(activeOccurrence, restored.activeOccurrences().getFirst());
+        assertEquals(List.of(closedNewRound), restored.rounds(activeOccurrence));
+        assertEquals(List.of(closedRound), original.rounds(closedOccurrence));
+        assertEquals(Map.of(admin, 1, member, -1), firstResult.netScores());
+        assertEquals(List.of(new SessionPayment(member, admin, 1)), firstResult.payments());
     }
 
     @Test
