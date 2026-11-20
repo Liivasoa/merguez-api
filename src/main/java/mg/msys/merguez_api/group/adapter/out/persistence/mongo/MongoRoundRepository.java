@@ -100,12 +100,8 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
             String exactStart = stored.getString("startedAtExact");
             Instant startedAt = exactStart == null
                     ? stored.getDate("startedAt").toInstant() : Instant.parse(exactStart);
-            Number revision = stored.get("roundsRevision", Number.class);
-            String token = new Document("_id", stored.get("_id"))
-                    .append("roundsRevision", revision == null ? 0L : revision.longValue())
-                    .toJson();
             SessionOccurrence occurrence = new SessionOccurrence(
-                    groupId, UUID.fromString(stored.getString("scheduleId")), startedAt, token);
+                    groupId, UUID.fromString(stored.getString("scheduleId")), startedAt);
             Document storedRounds = stored.get("rounds", Document.class);
             List<Round> rounds = storedRounds == null ? List.of() : storedRounds.values().stream()
                     .map(value -> toRound((Document) value, occurrence))

@@ -1,5 +1,6 @@
 package mg.msys.merguez_api.group.application.usecase;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -10,6 +11,7 @@ import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurre
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.domain.model.Group;
+import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.SessionClosureResult;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 
@@ -40,8 +42,9 @@ public final class CloseSessionUseCase {
         if (occurrence != null && !occurrence.scheduleId().equals(command.scheduledSessionId())) {
             throw new IllegalStateException("Requested session is not the active session");
         }
+        List<Round> rounds = occurrence == null ? List.of() : List.copyOf(group.rounds(occurrence));
         SessionClosureResult result = group.closeSession(command.requester(), occurrence);
-        occurrenceSaver.save(result.occurrence());
+        occurrenceSaver.save(result.occurrence(), rounds);
         result.netScores().keySet().forEach(member -> closureLogger.log(member, result));
         return result;
     }

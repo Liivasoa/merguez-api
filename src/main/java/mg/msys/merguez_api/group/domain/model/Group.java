@@ -98,7 +98,6 @@ public final class Group {
         }
         group.activeOccurrences.add(activeOccurrence);
         group.roundsByOccurrence.put(activeOccurrence, new ArrayList<>(rounds));
-        activeOccurrence.restoreRounds(rounds);
         return group;
     }
 
@@ -270,8 +269,8 @@ public final class Group {
 
         List<SessionPayment> payments = calculatePayments(netScores);
 
-        activeOccurrence.close(rounds);
-        occurrence.close(rounds);
+        activeOccurrence.close();
+        occurrence.close();
         activeOccurrences.remove(activeOccurrence);
         return new SessionClosureResult(occurrence, netScores, payments);
     }
