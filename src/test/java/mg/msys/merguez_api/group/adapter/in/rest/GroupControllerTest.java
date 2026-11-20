@@ -11,6 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -42,6 +44,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -57,7 +60,11 @@ import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
+import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
+import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
+import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
 import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
@@ -108,6 +115,57 @@ class GroupControllerTest {
 
     @MockitoBean
     private CloseSessionUseCase closeSessionUseCase;
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"save", "log", "load"})
+    void closeSessionPropagatesTechnicalFailureFromPortWithoutConflict(String failingPort) throws Exception {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+        Round round = group.addRound(admin, occurrence, List.of(combat));
+        group.closeRound(admin, round, List.of(new Combat(combat.participants(), Optional.of(admin))));
+        LoadGroupWithActiveOccurrencePort loader = mock(LoadGroupWithActiveOccurrencePort.class);
+        GroupRepository groups = mock(GroupRepository.class);
+        SaveClosedSessionOccurrencePort saver = mock(SaveClosedSessionOccurrencePort.class);
+        LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        when(loader.loadByGroupId(group.id())).thenReturn(Optional.of(group));
+        IllegalStateException failure = new IllegalStateException("technical " + failingPort + " failure");
+        switch (failingPort) {
+            case "save" -> doThrow(failure).when(saver).save(any(), any());
+            case "log" -> doThrow(failure).when(logger).log(any(), any());
+            case "load" -> when(loader.loadByGroupId(group.id())).thenThrow(failure);
+            default -> throw new AssertionError(failingPort);
+        }
+        CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
+        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupController(
+                createGroupUseCase, createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase,
+                addRoundUseCase, addCombatUseCase, closeRoundUseCase, realUseCase))
+                .setControllerAdvice(new GroupExceptionHandler()).build();
+
+        ServletException thrown = assertThrows(ServletException.class,
+                () -> standaloneMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
+                                group.id().value(), session.id())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requesterId\":\"%s\"}".formatted(admin.value()))));
+
+        assertSame(failure, thrown.getCause());
+        verify(loader).loadByGroupId(group.id());
+        if (failingPort.equals("log")) {
+            InOrder order = inOrder(saver, logger);
+            order.verify(saver).save(any(), any());
+            order.verify(logger).log(any(), any());
+        } else {
+            verifyNoInteractions(logger);
+            if (failingPort.equals("load")) {
+                verifyNoInteractions(saver);
+            } else {
+                verify(saver).save(any(), any());
+            }
+        }
+    }
 
     @Test
     void closeScheduledSessionForwardsRequestAndReturnsCompleteClosureResult() throws Exception {
@@ -170,7 +228,8 @@ class GroupControllerTest {
         String sensitiveDetail = "private diagnostic " + UUID.randomUUID();
         CloseSessionCommand command = new CloseSessionCommand(groupId, requester, sessionId);
         when(closeSessionUseCase.execute(command))
-                .thenThrow(new IllegalStateException(domainMessage + ": " + sensitiveDetail));
+                .thenThrow(new SessionClosureRefusedException(
+                        new IllegalStateException(domainMessage + ": " + sensitiveDetail)));
 
         mockMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
                         groupId.value(), sessionId)
@@ -190,7 +249,95 @@ class GroupControllerTest {
         return Stream.of(
                 "Session occurrence must be in progress",
                 "A session must contain at least one round",
-                "All rounds must be closed before closing the session");
+                "All rounds must be closed before closing the session",
+                "Requested session is not the active session");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"inactive", "no rounds", "open round", "different session"})
+    void realCloseSessionRefusalsReturnGenericConflictWithoutSavingOrLogging(String refusal) throws Exception {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        LoadGroupWithActiveOccurrencePort loader = mock(LoadGroupWithActiveOccurrencePort.class);
+        GroupRepository groups = mock(GroupRepository.class);
+        SaveClosedSessionOccurrencePort saver = mock(SaveClosedSessionOccurrencePort.class);
+        LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        String domainMessage;
+        UUID requestedId = session.id();
+        if (refusal.equals("inactive")) {
+            when(loader.loadByGroupId(group.id())).thenReturn(Optional.empty());
+            when(groups.findById(group.id())).thenReturn(Optional.of(group));
+            domainMessage = "Session occurrence must be in progress";
+        } else {
+            SessionOccurrence occurrence = group.startSession(admin, session);
+            when(loader.loadByGroupId(group.id())).thenReturn(Optional.of(group));
+            if (refusal.equals("open round") || refusal.equals("different session")) {
+                Combat combat = new Combat(List.of(admin, member), Optional.empty());
+                Round round = group.addRound(admin, occurrence, List.of(combat));
+                if (refusal.equals("different session")) {
+                    group.closeRound(admin, round, List.of(new Combat(combat.participants(), Optional.of(admin))));
+                    requestedId = UUID.randomUUID();
+                }
+            }
+            domainMessage = switch (refusal) {
+                case "no rounds" -> "A session must contain at least one round";
+                case "open round" -> "All rounds must be closed before closing the session";
+                case "different session" -> "Requested session is not the active session";
+                default -> throw new AssertionError(refusal);
+            };
+        }
+        CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
+        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupController(
+                createGroupUseCase, createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase,
+                addRoundUseCase, addCombatUseCase, closeRoundUseCase, realUseCase))
+                .setControllerAdvice(new GroupExceptionHandler()).build();
+
+        standaloneMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
+                        group.id().value(), requestedId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"requesterId\":\"%s\"}".formatted(admin.value())))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("The session closure request was refused."))
+                .andExpect(content().string(not(containsString(domainMessage))));
+
+        verifyNoInteractions(saver, logger);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"forbidden", "missing"})
+    void realCloseSessionPreservesForbiddenAndNotFound(String scenario) throws Exception {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId outsider = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(new UserId(UUID.randomUUID())));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        LoadGroupWithActiveOccurrencePort loader = mock(LoadGroupWithActiveOccurrencePort.class);
+        GroupRepository groups = mock(GroupRepository.class);
+        SaveClosedSessionOccurrencePort saver = mock(SaveClosedSessionOccurrencePort.class);
+        LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        if (scenario.equals("forbidden")) {
+            group.startSession(admin, session);
+            when(loader.loadByGroupId(group.id())).thenReturn(Optional.of(group));
+        } else {
+            when(loader.loadByGroupId(group.id())).thenReturn(Optional.empty());
+            when(groups.findById(group.id())).thenReturn(Optional.empty());
+        }
+        CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
+        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupController(
+                createGroupUseCase, createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase,
+                addRoundUseCase, addCombatUseCase, closeRoundUseCase, realUseCase))
+                .setControllerAdvice(new GroupExceptionHandler()).build();
+
+        standaloneMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
+                        group.id().value(), session.id())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"requesterId\":\"%s\"}".formatted(outsider.value())))
+                .andExpect(status().is(scenario.equals("forbidden") ? 403 : 404));
+
+        verifyNoInteractions(saver, logger);
     }
 
     @Test

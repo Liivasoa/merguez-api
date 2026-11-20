@@ -33,11 +33,15 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InOrder;
 
 import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
+import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
@@ -68,10 +72,10 @@ class CloseSessionUseCaseTest {
         fixture.assertSuccessfulClosure(fixture.member);
     }
 
-    @Test
-    void propagatesPersistenceFailureWithoutRequestingLogs() {
+    @ParameterizedTest
+    @MethodSource("technicalFailures")
+    void propagatesPersistenceFailureWithoutRequestingLogs(RuntimeException failure) {
         Fixture fixture = new Fixture();
-        RuntimeException failure = new RuntimeException("Persistence failed");
         doThrow(failure).when(fixture.persistence).save(eq(fixture.occurrence), anyList());
 
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> fixture.close(fixture.admin));
@@ -80,10 +84,10 @@ class CloseSessionUseCaseTest {
         verifyNoInteractions(fixture.logger);
     }
 
-    @Test
-    void propagatesLoggingFailureAfterSavingTheClosure() {
+    @ParameterizedTest
+    @MethodSource("technicalFailures")
+    void propagatesLoggingFailureAfterSavingTheClosure(RuntimeException failure) {
         Fixture fixture = new Fixture();
-        RuntimeException failure = new RuntimeException("Logging failed");
         doThrow(failure).when(fixture.logger).log(any(), any());
 
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> fixture.close(fixture.member));
@@ -92,6 +96,10 @@ class CloseSessionUseCaseTest {
         InOrder order = inOrder(fixture.persistence, fixture.logger);
         order.verify(fixture.persistence).save(eq(fixture.occurrence), eq(List.of(fixture.closedRound)));
         order.verify(fixture.logger).log(any(), any());
+    }
+
+    static Stream<RuntimeException> technicalFailures() {
+        return Stream.of(new RuntimeException("Technical failure"), new IllegalStateException("Technical failure"));
     }
 
     @Test
@@ -130,11 +138,13 @@ class CloseSessionUseCaseTest {
         assertTrue(occurrence.isStarted());
         assertFalse(occurrence.isClosed());
 
-        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+        SessionClosureRefusedException thrown = assertThrows(SessionClosureRefusedException.class,
                 () -> useCase.execute(new CloseSessionCommand(group.id(), admin, requestedSession.id())));
 
-        assertTrue(thrown.getMessage().toLowerCase(java.util.Locale.ROOT).contains("session"));
-        assertTrue(thrown.getMessage().toLowerCase(java.util.Locale.ROOT).contains("active"));
+        assertTrue(thrown.getCause() instanceof IllegalStateException);
+        assertEquals("Requested session is not the active session", thrown.getCause().getMessage());
+        assertTrue(thrown.getCause().getMessage().toLowerCase(java.util.Locale.ROOT).contains("session"));
+        assertTrue(thrown.getCause().getMessage().toLowerCase(java.util.Locale.ROOT).contains("active"));
         verify(loader).loadByGroupId(group.id());
         verify(group, never()).closeSession(nullable(UserId.class), nullable(SessionOccurrence.class));
         assertAll(
@@ -161,10 +171,10 @@ class CloseSessionUseCaseTest {
         var members = fixture.group.members();
         assertTrue(fixture.group.activeOccurrences().isEmpty());
 
-        IllegalStateException thrown = assertThrows(IllegalStateException.class, fixture::close);
+        SessionClosureRefusedException thrown = assertThrows(SessionClosureRefusedException.class, fixture::close);
 
-        assertSame(fixture.domainFailure.get(), thrown);
-        assertEquals("Session occurrence must be in progress", thrown.getMessage());
+        assertSame(fixture.domainFailure.get(), thrown.getCause());
+        assertEquals("Session occurrence must be in progress", thrown.getCause().getMessage());
         verify(fixture.loader).loadByGroupId(fixture.group.id());
         verify(fixture.groups).findById(fixture.group.id());
         verify(fixture.group).closeSession(fixture.admin, null);
@@ -180,10 +190,10 @@ class CloseSessionUseCaseTest {
         SessionOccurrence occurrence = fixture.group.startSession(fixture.admin, fixture.session);
         fixture.loadActiveGroup();
 
-        IllegalStateException thrown = assertThrows(IllegalStateException.class, fixture::close);
+        SessionClosureRefusedException thrown = assertThrows(SessionClosureRefusedException.class, fixture::close);
 
-        assertSame(fixture.domainFailure.get(), thrown);
-        assertEquals("A session must contain at least one round", thrown.getMessage());
+        assertSame(fixture.domainFailure.get(), thrown.getCause());
+        assertEquals("A session must contain at least one round", thrown.getCause().getMessage());
         verify(fixture.group).closeSession(fixture.admin, occurrence);
         assertTrue(occurrence.isStarted());
         assertFalse(occurrence.isClosed());
@@ -203,10 +213,10 @@ class CloseSessionUseCaseTest {
         Round openRound = fixture.group.addRound(fixture.admin, occurrence, List.of(combat));
         fixture.loadActiveGroup();
 
-        IllegalStateException thrown = assertThrows(IllegalStateException.class, fixture::close);
+        SessionClosureRefusedException thrown = assertThrows(SessionClosureRefusedException.class, fixture::close);
 
-        assertSame(fixture.domainFailure.get(), thrown);
-        assertEquals("All rounds must be closed before closing the session", thrown.getMessage());
+        assertSame(fixture.domainFailure.get(), thrown.getCause());
+        assertEquals("All rounds must be closed before closing the session", thrown.getCause().getMessage());
         verify(fixture.group).closeSession(fixture.admin, occurrence);
         assertTrue(occurrence.isStarted());
         assertFalse(occurrence.isClosed());
@@ -217,6 +227,18 @@ class CloseSessionUseCaseTest {
         assertEquals(RoundStatus.IN_PROGRESS, openRound.status());
         assertEquals(List.of(combat), openRound.combats());
         verifyNoInteractions(fixture.persistence, fixture.logger);
+    }
+
+    @Test
+    void propagatesLoaderFailureWithoutSavingOrLogging() {
+        Fixture fixture = new Fixture();
+        IllegalStateException failure = new IllegalStateException("Loading failed");
+        when(fixture.loader.loadByGroupId(fixture.group.id())).thenThrow(failure);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> fixture.close(fixture.admin));
+
+        assertSame(failure, thrown);
+        verifyNoInteractions(fixture.groups, fixture.persistence, fixture.logger);
     }
 
     private static UserId userId() {
