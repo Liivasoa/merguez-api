@@ -12,7 +12,21 @@ environment variables of the same name.
 The E2E run creates a group with one administrator and five members, schedules
 and starts a session, then creates and closes two rounds. Each run creates
 and leaves a new group and session data in the configured MongoDB database.
-The API currently has no endpoint for ending a session or deleting this data.
+The API currently has no endpoint for deleting this data.
+
+## Close a session
+
+`POST /api/v1/groups/{groupId}/sessions/{sessionId}/close` closes a started
+session. Send the ID of the requesting group member:
+
+```json
+{
+  "requesterId": "11111111-1111-1111-1111-111111111111"
+}
+```
+
+The response contains the closed occurrence, each member's net score, and the
+resulting payments.
 
 ## Close a round
 
