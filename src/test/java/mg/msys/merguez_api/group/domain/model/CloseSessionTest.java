@@ -231,4 +231,39 @@ class CloseSessionTest {
         assertEquals(members, group.members());
         assertTrue(group.rounds(occurrence).isEmpty());
     }
+
+    @Test
+    void refusesToCloseSessionWithAnUnclosedRoundWithoutChangingState() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        Combat combat = new Combat(List.of(admin, member), Optional.empty());
+        Round firstRound = group.addRound(admin, occurrence, List.of(combat));
+        Combat result = new Combat(combat.participants(), Optional.of(admin));
+        Round closedRound = group.closeRound(admin, firstRound, List.of(result));
+        Round ongoingRound = group.addRound(admin, occurrence, List.of(combat));
+        var activeOccurrences = group.activeOccurrences();
+        var sessions = group.sessions();
+        var members = group.members();
+        var rounds = group.rounds(occurrence);
+        assertTrue(occurrence.isStarted());
+        assertFalse(occurrence.isClosed());
+        assertEquals(List.of(occurrence), activeOccurrences);
+        assertEquals(List.of(closedRound, ongoingRound), rounds);
+        assertEquals(RoundStatus.CLOSED, closedRound.status());
+        assertEquals(List.of(result), closedRound.combats());
+        assertEquals(RoundStatus.IN_PROGRESS, ongoingRound.status());
+        assertEquals(List.of(combat), ongoingRound.combats());
+
+        assertThrows(IllegalStateException.class, () -> group.closeSession(admin, occurrence));
+
+        assertTrue(occurrence.isStarted());
+        assertFalse(occurrence.isClosed());
+        assertEquals(activeOccurrences, group.activeOccurrences());
+        assertEquals(sessions, group.sessions());
+        assertEquals(members, group.members());
+        assertEquals(rounds, group.rounds(occurrence));
+    }
 }
