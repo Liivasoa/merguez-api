@@ -93,22 +93,17 @@ class CloseSessionUseCaseTest {
     @Test
     void propagatesDomainRefusalWhenNoOccurrenceIsActive() {
         RefusalFixture fixture = new RefusalFixture();
-        GroupRepository groups = mock(GroupRepository.class);
         when(fixture.loader.loadByGroupId(fixture.group.id())).thenReturn(Optional.empty());
-        when(groups.findById(fixture.group.id())).thenReturn(Optional.of(fixture.group));
-        CloseSessionUseCase useCase = new CloseSessionUseCase(
-                fixture.loader, groups, fixture.persistence, fixture.logger);
         var sessions = fixture.group.sessions();
         var members = fixture.group.members();
         assertTrue(fixture.group.activeOccurrences().isEmpty());
 
-        IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> useCase.execute(new CloseSessionCommand(fixture.group.id(), fixture.admin)));
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, fixture::close);
 
         assertSame(fixture.domainFailure.get(), thrown);
         assertEquals("Session occurrence must be in progress", thrown.getMessage());
         verify(fixture.loader).loadByGroupId(fixture.group.id());
-        verify(groups).findById(fixture.group.id());
+        verify(fixture.groups).findById(fixture.group.id());
         verify(fixture.group).closeSession(fixture.admin, null);
         assertTrue(fixture.group.activeOccurrences().isEmpty());
         assertEquals(sessions, fixture.group.sessions());
@@ -171,12 +166,14 @@ class CloseSessionUseCaseTest {
         final Group group = spy(Group.create("Training", admin, List.of(member)));
         final Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
         final LoadGroupWithActiveOccurrencePort loader = mock(LoadGroupWithActiveOccurrencePort.class);
+        final GroupRepository groups = mock(GroupRepository.class);
         final SaveClosedSessionOccurrencePort persistence = mock(SaveClosedSessionOccurrencePort.class);
         final LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
         final AtomicReference<RuntimeException> domainFailure = new AtomicReference<>();
-        final CloseSessionUseCase useCase = new CloseSessionUseCase(loader, persistence, logger);
+        final CloseSessionUseCase useCase = new CloseSessionUseCase(loader, groups, persistence, logger);
 
         RefusalFixture() {
+            when(groups.findById(group.id())).thenReturn(Optional.of(group));
             doAnswer(invocation -> {
                 try {
                     return invocation.callRealMethod();
@@ -205,9 +202,10 @@ class CloseSessionUseCaseTest {
         final SessionOccurrence occurrence = group.startSession(admin, session);
         final Instant startedAt = occurrence.startedAt();
         final LoadGroupWithActiveOccurrencePort loader = mock(LoadGroupWithActiveOccurrencePort.class);
+        final GroupRepository groups = mock(GroupRepository.class);
         final SaveClosedSessionOccurrencePort persistence = mock(SaveClosedSessionOccurrencePort.class);
         final LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
-        final CloseSessionUseCase useCase = new CloseSessionUseCase(loader, persistence, logger);
+        final CloseSessionUseCase useCase = new CloseSessionUseCase(loader, groups, persistence, logger);
         final Round closedRound;
 
         Fixture() {
@@ -216,6 +214,7 @@ class CloseSessionUseCaseTest {
             closedRound = group.closeRound(admin, round,
                     List.of(new Combat(combat.participants(), Optional.of(admin))));
             when(loader.loadByGroupId(group.id())).thenReturn(Optional.of(group));
+            when(groups.findById(group.id())).thenReturn(Optional.of(group));
             doAnswer(invocation -> {
                 SessionOccurrence saved = invocation.getArgument(0);
                 assertSame(occurrence, saved);
