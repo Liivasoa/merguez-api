@@ -161,6 +161,38 @@ class GroupControllerTest {
         verifyNoInteractions(closeSessionUseCase);
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("sessionClosureRefusals")
+    void closeSessionRefusalReturnsConflictWithoutInternalDetails(String domainMessage) throws Exception {
+        GroupId groupId = GroupId.random();
+        UUID sessionId = UUID.randomUUID();
+        UserId requester = new UserId(UUID.randomUUID());
+        String sensitiveDetail = "private diagnostic " + UUID.randomUUID();
+        CloseSessionCommand command = new CloseSessionCommand(groupId, requester, sessionId);
+        when(closeSessionUseCase.execute(command))
+                .thenThrow(new IllegalStateException(domainMessage + ": " + sensitiveDetail));
+
+        mockMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
+                        groupId.value(), sessionId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"requesterId\":\"%s\"}".formatted(requester.value())))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("The session closure request was refused."))
+                .andExpect(content().string(not(containsString(domainMessage))))
+                .andExpect(content().string(not(containsString(sensitiveDetail))));
+
+        verify(closeSessionUseCase).execute(command);
+    }
+
+    static Stream<String> sessionClosureRefusals() {
+        return Stream.of(
+                "Session occurrence must be in progress",
+                "A session must contain at least one round",
+                "All rounds must be closed before closing the session");
+    }
+
     @Test
     void closesRoundAndReturnsOptionalWinners() throws Exception {
         GroupId groupId = GroupId.random();
