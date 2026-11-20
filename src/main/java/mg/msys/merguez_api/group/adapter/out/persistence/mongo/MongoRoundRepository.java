@@ -37,7 +37,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
     public void save(Round round) {
         Document filter = MongoSessionOccurrenceFilters.occurrenceFilter(round.occurrence());
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
-                filter, new Document("$set", new Document("rounds." + round.number(), toStoredRound(round))));
+                filter, roundUpdate("rounds." + round.number(), round));
         if (result.getMatchedCount() == 0) {
             throw new IllegalStateException("Active session occurrence not found");
         }
@@ -52,7 +52,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
         Document filter = MongoSessionOccurrenceFilters.occurrenceFilter(expected.occurrence())
                 .append(path, toStoredRound(expected));
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
-                filter, new Document("$set", new Document(path, toStoredRound(updated))));
+                filter, roundUpdate(path, updated));
         if (result.getMatchedCount() == 0) {
             throw new RoundOperationRefusedException(
                     new IllegalStateException("Round was changed or the active session is no longer available"));
@@ -70,11 +70,17 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
                 .append("rounds." + round.number(), new Document("$exists", false))
                 .append("$expr", new Document("$eq", List.of(new Document("$size", activeRounds), 0)));
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
-                filter, new Document("$set", new Document("rounds." + round.number(), toStoredRound(round))));
+                filter, roundUpdate("rounds." + round.number(), round));
         if (result.getMatchedCount() == 0) {
             throw new RoundOperationRefusedException(
                     new IllegalStateException("Round creation conflicts with the active session state"));
         }
+    }
+
+    private static Document roundUpdate(String path, Round round) {
+        // Every round mutation must advance this revision in the same atomic update.
+        return new Document("$set", new Document(path, toStoredRound(round)))
+                .append("$inc", new Document("roundsRevision", 1L));
     }
 
     private static Document toStoredRound(Round round) {
@@ -94,8 +100,12 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
             String exactStart = stored.getString("startedAtExact");
             Instant startedAt = exactStart == null
                     ? stored.getDate("startedAt").toInstant() : Instant.parse(exactStart);
+            Number revision = stored.get("roundsRevision", Number.class);
+            String token = new Document("_id", stored.get("_id"))
+                    .append("roundsRevision", revision == null ? 0L : revision.longValue())
+                    .toJson();
             SessionOccurrence occurrence = new SessionOccurrence(
-                    groupId, UUID.fromString(stored.getString("scheduleId")), startedAt);
+                    groupId, UUID.fromString(stored.getString("scheduleId")), startedAt, token);
             Document storedRounds = stored.get("rounds", Document.class);
             List<Round> rounds = storedRounds == null ? List.of() : storedRounds.values().stream()
                     .map(value -> toRound((Document) value, occurrence))
