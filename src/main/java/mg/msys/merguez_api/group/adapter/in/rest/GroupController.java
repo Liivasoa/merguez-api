@@ -41,6 +41,7 @@ import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
 import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
+import mg.msys.merguez_api.group.domain.model.SessionClosureResult;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 
 @RestController
@@ -189,11 +190,19 @@ public class GroupController {
     }
 
     @PostMapping("/{groupId}/sessions/{sessionId}/close")
-    public ResponseEntity<SessionClosureResponse> closeSession(
+    public ResponseEntity<?> closeSession(
             @PathVariable UUID groupId,
             @PathVariable UUID sessionId,
             @Valid @RequestBody CloseSessionRequest request) {
-        var result = closeSessionUseCase.execute(request.toCommand(new GroupId(groupId), sessionId));
+        var command = request.toCommand(new GroupId(groupId), sessionId);
+        SessionClosureResult result;
+        try {
+            result = closeSessionUseCase.execute(command);
+        } catch (IllegalStateException ex) {
+            log.debug("Session closure refused", ex);
+            return ResponseEntity.of(ProblemDetail.forStatusAndDetail(
+                    HttpStatus.CONFLICT, "The session closure request was refused.")).build();
+        }
         return ResponseEntity.ok(SessionClosureResponse.from(result));
     }
 
