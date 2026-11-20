@@ -294,6 +294,77 @@ class MongoSessionOccurrenceRepositoryTest {
         assertClosureRefusesDirectRoundChange(false, true);
     }
 
+    @Test
+    void refusesSessionClosureWhenDirectWriteReplacesRoundStatusWithArray() {
+        assertClosureRefusesScalarReplacedWithArray(false);
+    }
+
+    @Test
+    void refusesSessionClosureWhenDirectWriteReplacesCombatWinnerWithArray() {
+        assertClosureRefusesScalarReplacedWithArray(true);
+    }
+
+    private void assertClosureRefusesScalarReplacedWithArray(boolean winner) {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        Round initial = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(admin))));
+        roundRepository.save(initial);
+
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        Document filter = new Document("groupId", group.id().value().toString());
+        Document before = collection.find(filter).first();
+        assertNotNull(before);
+        assertNotNull(before.get("roundsRevision"));
+        AtomicReference<Document> afterConcurrentWrite = new AtomicReference<>();
+        LoadGroupWithActiveOccurrencePort racingLoader = id -> {
+            Group snapshot = activeOccurrenceLoader.loadByGroupId(id).orElseThrow();
+            assertEquals(List.of(initial), snapshot.rounds(snapshot.activeOccurrences().getFirst()));
+            String path = winner ? "rounds.1.combats.0.winner" : "rounds.1.status";
+            List<String> replacement = winner
+                    ? List.of(admin.value().toString(), member.value().toString())
+                    : List.of("CLOSED", "IN_PROGRESS");
+            assertEquals(1L, collection.updateOne(filter,
+                    new Document("$set", new Document(path, replacement))).getModifiedCount());
+            Document changed = collection.find(filter).first();
+            assertNotNull(changed);
+            assertEquals(before.get("roundsRevision"), changed.get("roundsRevision"));
+            Document changedRound = changed.get("rounds", Document.class).get("1", Document.class);
+            Object changedValue = winner
+                    ? changedRound.getList("combats", Document.class).getFirst().get("winner")
+                    : changedRound.get("status");
+            assertEquals(replacement, changedValue);
+            afterConcurrentWrite.set(changed);
+            return Optional.of(snapshot);
+        };
+        LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        CloseSessionUseCase useCase =
+                new CloseSessionUseCase(racingLoader, groupRepository, closedOccurrenceSaver, logger);
+
+        assertAll(
+                () -> {
+                    RuntimeException conflict = assertThrows(RuntimeException.class, () -> useCase.execute(
+                            new CloseSessionCommand(group.id(), admin, session.id())));
+                    String description = (conflict.getClass().getSimpleName() + " " + conflict.getMessage())
+                            .toLowerCase(java.util.Locale.ROOT);
+                    assertTrue(description.contains("conflict") || description.contains("changed")
+                                    || description.contains("modified") || description.contains("concurrent")
+                                    || description.contains("stale"),
+                            "The refusal must explicitly identify the concurrent change");
+                },
+                () -> assertNotNull(afterConcurrentWrite.get(), "The real concurrent write must have completed"),
+                () -> assertEquals(afterConcurrentWrite.get(), collection.find(filter).first(),
+                        "A failed closure must preserve the directly updated occurrence"),
+                () -> assertEquals("IN_PROGRESS", collection.find(filter).first().getString("status")),
+                () -> assertEquals(1L, collection.countDocuments(filter)),
+                () -> verifyNoInteractions(logger));
+    }
+
     private void assertClosureRefusesDirectRoundChange(boolean addRound, boolean legacy) {
         UserId admin = new UserId(UUID.randomUUID());
         UserId member = new UserId(UUID.randomUUID());
