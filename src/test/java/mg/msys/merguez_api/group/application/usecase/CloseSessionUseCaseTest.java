@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
@@ -70,7 +72,7 @@ class CloseSessionUseCaseTest {
     void propagatesPersistenceFailureWithoutRequestingLogs() {
         Fixture fixture = new Fixture();
         RuntimeException failure = new RuntimeException("Persistence failed");
-        doThrow(failure).when(fixture.persistence).save(fixture.occurrence);
+        doThrow(failure).when(fixture.persistence).save(eq(fixture.occurrence), anyList());
 
         RuntimeException thrown = assertThrows(RuntimeException.class, () -> fixture.close(fixture.admin));
 
@@ -88,7 +90,7 @@ class CloseSessionUseCaseTest {
 
         assertSame(failure, thrown);
         InOrder order = inOrder(fixture.persistence, fixture.logger);
-        order.verify(fixture.persistence).save(fixture.occurrence);
+        order.verify(fixture.persistence).save(eq(fixture.occurrence), eq(List.of(fixture.closedRound)));
         order.verify(fixture.logger).log(any(), any());
     }
 
@@ -258,7 +260,7 @@ class CloseSessionUseCaseTest {
         final UserId admin = userId();
         final UserId member = userId();
         final UserId inactiveMember = userId();
-        final Group group = Group.create("Training", admin, List.of(member, inactiveMember));
+        final Group group = spy(Group.create("Training", admin, List.of(member, inactiveMember)));
         final Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
         final SessionOccurrence occurrence = group.startSession(admin, session);
         final Instant startedAt = occurrence.startedAt();
@@ -278,10 +280,13 @@ class CloseSessionUseCaseTest {
             when(groups.findById(group.id())).thenReturn(Optional.of(group));
             doAnswer(invocation -> {
                 SessionOccurrence saved = invocation.getArgument(0);
+                List<Round> snapshot = invocation.getArgument(1);
                 assertSame(occurrence, saved);
                 assertTrue(saved.isClosed());
+                assertEquals(List.of(closedRound), snapshot);
+                assertThrows(UnsupportedOperationException.class, () -> snapshot.add(closedRound));
                 return null;
-            }).when(persistence).save(any());
+            }).when(persistence).save(any(), anyList());
         }
 
         SessionClosureResult close(UserId requester) {
@@ -293,6 +298,10 @@ class CloseSessionUseCaseTest {
 
             SessionClosureResult result = close(requester);
 
+            InOrder snapshotOrder = inOrder(group, persistence);
+            snapshotOrder.verify(group).rounds(occurrence);
+            snapshotOrder.verify(group).closeSession(requester, occurrence);
+            snapshotOrder.verify(persistence).save(same(result.occurrence()), eq(List.of(closedRound)));
             assertAll(
                     () -> assertSame(occurrence, result.occurrence()),
                     () -> assertTrue(result.occurrence().isClosed()),
@@ -306,7 +315,7 @@ class CloseSessionUseCaseTest {
                     () -> assertEquals(1, result.payments().size()));
             verify(loader).loadByGroupId(group.id());
             InOrder order = inOrder(persistence, logger);
-            order.verify(persistence).save(same(result.occurrence()));
+            order.verify(persistence).save(same(result.occurrence()), eq(List.of(closedRound)));
             order.verify(logger, times(3)).log(any(), same(result));
             verify(logger).log(admin, result);
             verify(logger).log(member, result);

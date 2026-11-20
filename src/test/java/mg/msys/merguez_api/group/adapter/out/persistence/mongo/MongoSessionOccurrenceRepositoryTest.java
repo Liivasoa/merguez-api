@@ -231,12 +231,13 @@ class MongoSessionOccurrenceRepositoryTest {
         Group loaded = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
         SessionOccurrence loadedOccurrence = loaded.activeOccurrences().getFirst();
         assertEquals(List.of(firstRound, secondRound), loaded.rounds(loadedOccurrence));
+        List<Round> snapshot = loaded.rounds(loadedOccurrence);
         var closure = loaded.closeSession(admin, loadedOccurrence);
         assertTrue(closure.occurrence().isClosed());
         assertEquals(Map.of(admin, 1, member, -1), closure.netScores());
 
         assertNotNull(closedOccurrenceSaver, "A Mongo closed occurrence saver must be available");
-        closedOccurrenceSaver.save(closure.occurrence());
+        closedOccurrenceSaver.save(closure.occurrence(), snapshot);
 
         SessionOccurrenceDocument restored = storedOccurrences.findById(id).orElseThrow();
         Document after = collection.find(new Document("_id", id)).first();
@@ -271,6 +272,115 @@ class MongoSessionOccurrenceRepositoryTest {
     @Test
     void refusesSessionClosureWhenAClosedRoundIsModifiedAfterLoading() {
         assertClosureRefusesConcurrentRoundChange(false);
+    }
+
+    @Test
+    void refusesSessionClosureWhenDirectWriteAddsRoundWithoutChangingRevision() {
+        assertClosureRefusesDirectRoundChange(true, false);
+    }
+
+    @Test
+    void refusesSessionClosureWhenDirectWriteModifiesRoundWithoutChangingRevision() {
+        assertClosureRefusesDirectRoundChange(false, false);
+    }
+
+    @Test
+    void refusesSessionClosureWhenDirectWriteAddsRoundToLegacyOccurrence() {
+        assertClosureRefusesDirectRoundChange(true, true);
+    }
+
+    @Test
+    void refusesSessionClosureWhenDirectWriteModifiesRoundInLegacyOccurrence() {
+        assertClosureRefusesDirectRoundChange(false, true);
+    }
+
+    private void assertClosureRefusesDirectRoundChange(boolean addRound, boolean legacy) {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        Round initial = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(admin))));
+        roundRepository.save(initial);
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        Document filter = new Document("groupId", group.id().value().toString());
+        if (legacy) {
+            collection.updateOne(filter, new Document("$unset", new Document("roundsRevision", "")));
+        }
+        Document before = collection.find(filter).first();
+        assertNotNull(before);
+        assertEquals(legacy, !before.containsKey("roundsRevision"));
+        AtomicReference<Document> afterConcurrentWrite = new AtomicReference<>();
+        LoadGroupWithActiveOccurrencePort racingLoader = id -> {
+            Group snapshot = activeOccurrenceLoader.loadByGroupId(id).orElseThrow();
+            assertEquals(List.of(initial), snapshot.rounds(snapshot.activeOccurrences().getFirst()));
+            Document storedRound = new Document("number", addRound ? 2 : 1)
+                    .append("status", "CLOSED")
+                    .append("combats", List.of(new Document("participants",
+                            List.of(admin.value().toString(), member.value().toString()))
+                            .append("winner", member.value().toString())));
+            assertEquals(1L, collection.updateOne(filter, new Document("$set",
+                    new Document("rounds." + (addRound ? 2 : 1), storedRound))).getModifiedCount());
+            Document changed = collection.find(filter).first();
+            assertNotNull(changed);
+            assertEquals(before.get("roundsRevision"), changed.get("roundsRevision"));
+            assertNotEquals(before.get("rounds"), changed.get("rounds"));
+            afterConcurrentWrite.set(changed);
+            return Optional.of(snapshot);
+        };
+        LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        CloseSessionUseCase useCase =
+                new CloseSessionUseCase(racingLoader, groupRepository, closedOccurrenceSaver, logger);
+
+        assertAll(
+                () -> {
+                    RuntimeException conflict = assertThrows(RuntimeException.class, () -> useCase.execute(
+                            new CloseSessionCommand(group.id(), admin, session.id())));
+                    String description = (conflict.getClass().getSimpleName() + " " + conflict.getMessage())
+                            .toLowerCase(java.util.Locale.ROOT);
+                    assertTrue(description.contains("conflict") || description.contains("changed")
+                                    || description.contains("modified") || description.contains("concurrent")
+                                    || description.contains("stale"),
+                            "The refusal must explicitly identify the concurrent change");
+                },
+                () -> assertNotNull(afterConcurrentWrite.get()),
+                () -> assertEquals(afterConcurrentWrite.get(), collection.find(filter).first(),
+                        "A failed closure must not modify the directly updated occurrence"),
+                () -> verifyNoInteractions(logger));
+    }
+
+    @Test
+    void closesUnchangedLegacyOccurrenceWithoutRevisionAndPreservesAdditionalFields() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", admin, List.of(member));
+        Session session = group.createSession(admin, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(admin, session);
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+        roundRepository.save(new Round(occurrence, 1, RoundStatus.CLOSED, List.of(
+                new Combat(List.of(admin, member), Optional.of(admin)))));
+        var collection = mongoTemplate.getCollection("session-occurrences");
+        Document filter = new Document("groupId", group.id().value().toString());
+        collection.updateOne(filter, new Document("$unset", new Document("roundsRevision", ""))
+                .append("$set", new Document("legacyMetadata", new Document("keep", "value"))));
+        Document before = collection.find(filter).first();
+        assertNotNull(before);
+        assertFalse(before.containsKey("roundsRevision"));
+        LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
+        CloseSessionUseCase useCase =
+                new CloseSessionUseCase(activeOccurrenceLoader, groupRepository, closedOccurrenceSaver, logger);
+
+        var result = useCase.execute(new CloseSessionCommand(group.id(), admin, session.id()));
+
+        assertTrue(result.occurrence().isClosed());
+        Document expected = new Document(before);
+        expected.put("status", "CLOSED");
+        assertEquals(expected, collection.find(filter).first());
+        org.mockito.Mockito.verify(logger, org.mockito.Mockito.times(2)).log(any(), org.mockito.ArgumentMatchers.same(result));
     }
 
     private void assertClosureRefusesConcurrentRoundChange(boolean addRound) {
