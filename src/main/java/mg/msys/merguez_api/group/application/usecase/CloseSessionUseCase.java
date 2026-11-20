@@ -37,6 +37,9 @@ public final class CloseSessionUseCase {
         SessionOccurrence occurrence = activeGroup.isPresent()
                 ? group.activeOccurrences().stream().findFirst().orElse(null)
                 : null;
+        if (occurrence != null && !occurrence.scheduleId().equals(command.scheduledSessionId())) {
+            throw new IllegalStateException("Requested session is not the active session");
+        }
         SessionClosureResult result = group.closeSession(command.requester(), occurrence);
         occurrenceSaver.save(result.occurrence());
         result.netScores().keySet().forEach(member -> closureLogger.log(member, result));
