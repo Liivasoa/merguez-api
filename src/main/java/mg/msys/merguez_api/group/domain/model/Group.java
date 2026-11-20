@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
+import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 public final class Group {
@@ -242,15 +243,15 @@ public final class Group {
             throw new GroupAccessDeniedException("Only group members can close sessions");
         }
         if (occurrence == null || occurrence.isClosed() || !activeOccurrences.contains(occurrence)) {
-            throw new IllegalStateException("Session occurrence must be in progress");
+            throw new SessionClosureRejectedException("Session occurrence must be in progress");
         }
         SessionOccurrence activeOccurrence = activeOccurrences.get(activeOccurrences.indexOf(occurrence));
         List<Round> rounds = roundsByOccurrence.get(activeOccurrence);
         if (rounds == null || rounds.isEmpty()) {
-            throw new IllegalStateException("A session must contain at least one round");
+            throw new SessionClosureRejectedException("A session must contain at least one round");
         }
         if (rounds.stream().anyMatch(round -> round.status() != RoundStatus.CLOSED)) {
-            throw new IllegalStateException("All rounds must be closed before closing the session");
+            throw new SessionClosureRejectedException("All rounds must be closed before closing the session");
         }
 
         Map<UserId, Integer> netScores = new LinkedHashMap<>();

@@ -6,10 +6,12 @@ import java.util.Optional;
 
 import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
+import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
+import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.SessionClosureResult;
@@ -40,10 +42,16 @@ public final class CloseSessionUseCase {
                 ? group.activeOccurrences().stream().findFirst().orElse(null)
                 : null;
         if (occurrence != null && !occurrence.scheduleId().equals(command.scheduledSessionId())) {
-            throw new IllegalStateException("Requested session is not the active session");
+            throw new SessionClosureRefusedException(
+                    new IllegalStateException("Requested session is not the active session"));
         }
         List<Round> rounds = occurrence == null ? List.of() : List.copyOf(group.rounds(occurrence));
-        SessionClosureResult result = group.closeSession(command.requester(), occurrence);
+        SessionClosureResult result;
+        try {
+            result = group.closeSession(command.requester(), occurrence);
+        } catch (SessionClosureRejectedException ex) {
+            throw new SessionClosureRefusedException(ex);
+        }
         occurrenceSaver.save(result.occurrence(), rounds);
         result.netScores().keySet().forEach(member -> closureLogger.log(member, result));
         return result;

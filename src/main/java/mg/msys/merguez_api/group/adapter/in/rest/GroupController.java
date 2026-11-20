@@ -195,14 +195,7 @@ public class GroupController {
             @PathVariable UUID sessionId,
             @Valid @RequestBody CloseSessionRequest request) {
         var command = request.toCommand(new GroupId(groupId), sessionId);
-        SessionClosureResult result;
-        try {
-            result = closeSessionUseCase.execute(command);
-        } catch (IllegalStateException ex) {
-            log.debug("Session closure refused", ex);
-            return ResponseEntity.of(ProblemDetail.forStatusAndDetail(
-                    HttpStatus.CONFLICT, "The session closure request was refused.")).build();
-        }
+        SessionClosureResult result = closeSessionUseCase.execute(command);
         return ResponseEntity.ok(SessionClosureResponse.from(result));
     }
 
