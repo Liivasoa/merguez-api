@@ -28,20 +28,20 @@ import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
-class CreateSessionUseCaseTest {
+class CreateSessionServiceTest {
 
     @Test
     void rejectsSessionOperationsForMissingGroupWithoutSaving() {
         GroupId groupId = GroupId.random();
         InMemoryGroupRepository repository = new InMemoryGroupRepository();
-        CreateSessionUseCase createSessionUseCase = new CreateSessionUseCase(repository);
-        GetGroupSessionsUseCase getGroupSessionsUseCase = new GetGroupSessionsUseCase(repository);
+        CreateSessionService CreateSessionService = new CreateSessionService(repository);
+        GetGroupSessionsService GetGroupSessionsService = new GetGroupSessionsService(repository);
         CreateSessionCommand command =
                 new CreateSessionCommand(groupId, userId(), "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
         assertAll(
-                () -> assertThrows(GroupNotFoundException.class, () -> createSessionUseCase.execute(command)),
-                () -> assertThrows(GroupNotFoundException.class, () -> getGroupSessionsUseCase.execute(groupId)),
+                () -> assertThrows(GroupNotFoundException.class, () -> CreateSessionService.execute(command)),
+                () -> assertThrows(GroupNotFoundException.class, () -> GetGroupSessionsService.execute(groupId)),
                 () -> assertEquals(0, repository.savedGroupIds.size()));
     }
 
@@ -65,7 +65,7 @@ class CreateSessionUseCaseTest {
         Session storedExisting = storedGroup.createSession(
                 admin, "Existing session", DayOfWeek.MONDAY, LocalTime.of(10, 0));
         InMemoryGroupRepository repository = new InMemoryGroupRepository(storedGroup, otherGroup);
-        CreateSessionUseCase useCase = new CreateSessionUseCase(repository);
+        CreateSessionService useCase = new CreateSessionService(repository);
         CreateSessionCommand command =
                 new CreateSessionCommand(groupId, requester, "New session", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
@@ -87,7 +87,7 @@ class CreateSessionUseCaseTest {
         Group group = Group.restore(groupId, "Dojo du mardi", null, admin, List.of(member));
         UserId requester = "admin".equals(requesterRole) ? admin : member;
         InMemoryGroupRepository repository = new InMemoryGroupRepository(group);
-        CreateSessionUseCase useCase = new CreateSessionUseCase(repository);
+        CreateSessionService useCase = new CreateSessionService(repository);
         CreateSessionCommand command =
                 new CreateSessionCommand(groupId, requester, name, DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
@@ -113,7 +113,7 @@ class CreateSessionUseCaseTest {
         GroupId groupId = GroupId.random();
         Group group = Group.restore(groupId, "Dojo du mardi", null, admin, List.of(userId()));
         InMemoryGroupRepository repository = new InMemoryGroupRepository(group);
-        CreateSessionUseCase useCase = new CreateSessionUseCase(repository);
+        CreateSessionService useCase = new CreateSessionService(repository);
         CreateSessionCommand command =
                 new CreateSessionCommand(groupId, admin, "Evening training", day, startTime);
 
@@ -137,7 +137,7 @@ class CreateSessionUseCaseTest {
         Group secondGroup =
                 Group.restore(GroupId.random(), "Dojo du jeudi", null, secondAdmin, List.of(secondMember));
         InMemoryGroupRepository repository = new InMemoryGroupRepository(firstGroup, secondGroup);
-        CreateSessionUseCase useCase = new CreateSessionUseCase(repository);
+        CreateSessionService useCase = new CreateSessionService(repository);
         CreateSessionCommand duplicateCommand = new CreateSessionCommand(
                 firstGroup.id(), firstMember, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
@@ -162,12 +162,12 @@ class CreateSessionUseCaseTest {
         GroupId groupId = GroupId.random();
         Group group = Group.restore(groupId, "Dojo du mardi", null, admin, List.of(userId()));
         InMemoryGroupRepository repository = new InMemoryGroupRepository(group);
-        CreateSessionUseCase createSessionUseCase = new CreateSessionUseCase(repository);
+        CreateSessionService CreateSessionService = new CreateSessionService(repository);
         CreateSessionCommand command =
                 new CreateSessionCommand(groupId, admin, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
-        Session createdSession = createSessionUseCase.execute(command);
-        List<Session> sessions = new GetGroupSessionsUseCase(repository).execute(groupId);
+        Session createdSession = CreateSessionService.execute(command);
+        List<Session> sessions = new GetGroupSessionsService(repository).execute(groupId);
 
         assertEquals(List.of(createdSession), sessions);
     }

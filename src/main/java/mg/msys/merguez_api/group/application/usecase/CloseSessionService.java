@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureConflictException;
@@ -18,13 +19,13 @@ import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.SessionClosureResult;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 
-public final class CloseSessionUseCase {
+public final class CloseSessionService implements CloseSessionUseCase {
     private final LoadGroupWithActiveOccurrencePort groupLoader;
     private final GroupRepository groupRepository;
     private final SaveClosedSessionOccurrencePort occurrenceSaver;
     private final LogSessionClosurePort closureLogger;
 
-    public CloseSessionUseCase(
+    public CloseSessionService(
             LoadGroupWithActiveOccurrencePort groupLoader,
             GroupRepository groupRepository,
             SaveClosedSessionOccurrencePort occurrenceSaver,
@@ -35,6 +36,7 @@ public final class CloseSessionUseCase {
         this.closureLogger = Objects.requireNonNull(closureLogger);
     }
 
+    @Override
     public SessionClosureResult execute(CloseSessionCommand command) {
         Optional<Group> activeGroup = groupLoader.loadByGroupId(command.groupId());
         Group group = activeGroup.orElseGet(() -> groupRepository.findById(command.groupId())

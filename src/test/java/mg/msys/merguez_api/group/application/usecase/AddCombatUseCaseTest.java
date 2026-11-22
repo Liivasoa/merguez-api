@@ -31,14 +31,14 @@ import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
-class AddCombatUseCaseTest {
+class AddCombatServiceTest {
 
     @Test
     void addsCombatToPersistedRoundAndReturnsUpdatedRoundAfterReload() {
         Scenario scenario = scenario();
         Combat availableCombat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.of(scenario.thirdMember()));
-        AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), scenario.roundRepository());
+        AddCombatService useCase = new AddCombatService(scenario.groupLoader(), scenario.roundRepository());
 
         Round result = useCase.execute(new AddCombatCommand(
                 scenario.groupId(), scenario.requester(), scenario.existingRound().number(), availableCombat));
@@ -66,7 +66,7 @@ class AddCombatUseCaseTest {
         Scenario scenario = scenario();
         Combat combatWithAssignedParticipant = new Combat(
                 List.of(scenario.firstMember(), scenario.thirdMember()), Optional.empty());
-        AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), scenario.roundRepository());
+        AddCombatService useCase = new AddCombatService(scenario.groupLoader(), scenario.roundRepository());
 
         RoundOperationRefusedException exception = assertThrowsExactly(
                 RoundOperationRefusedException.class,
@@ -92,7 +92,7 @@ class AddCombatUseCaseTest {
         Scenario scenario = scenario();
         Combat availableCombat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
-        AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), scenario.roundRepository());
+        AddCombatService useCase = new AddCombatService(scenario.groupLoader(), scenario.roundRepository());
 
         RoundOperationRefusedException exception = assertThrowsExactly(
                 RoundOperationRefusedException.class,
@@ -113,7 +113,7 @@ class AddCombatUseCaseTest {
     void refusesUnavailableActiveOccurrenceWithoutSaving() {
         Scenario scenario = scenario();
         LoadGroupWithActiveOccurrencePort groupLoader = ignored -> Optional.empty();
-        AddCombatUseCase useCase = new AddCombatUseCase(groupLoader, scenario.roundRepository());
+        AddCombatService useCase = new AddCombatService(groupLoader, scenario.roundRepository());
         Combat combat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
 
@@ -138,7 +138,7 @@ class AddCombatUseCaseTest {
                 scenario.firstMember(),
                 List.of(scenario.secondMember(), scenario.thirdMember(), scenario.fourthMember()));
         LoadGroupWithActiveOccurrencePort groupLoader = ignored -> Optional.of(loadedGroupWithoutOccurrence);
-        AddCombatUseCase useCase = new AddCombatUseCase(groupLoader, scenario.roundRepository());
+        AddCombatService useCase = new AddCombatService(groupLoader, scenario.roundRepository());
         Combat combat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
 
@@ -158,7 +158,7 @@ class AddCombatUseCaseTest {
         IllegalStateException repositoryFailure = new IllegalStateException("Round storage is unavailable");
         RoundRepository failingRepository = mock(RoundRepository.class);
         doThrow(repositoryFailure).when(failingRepository).replace(any(Round.class), any(Round.class));
-        AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), failingRepository);
+        AddCombatService useCase = new AddCombatService(scenario.groupLoader(), failingRepository);
         Combat availableCombat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
 
@@ -183,7 +183,7 @@ class AddCombatUseCaseTest {
         LoadGroupWithActiveOccurrencePort failingLoader = ignored -> {
             throw loaderFailure;
         };
-        AddCombatUseCase useCase = new AddCombatUseCase(failingLoader, scenario.roundRepository());
+        AddCombatService useCase = new AddCombatService(failingLoader, scenario.roundRepository());
         Combat availableCombat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
 
@@ -204,7 +204,7 @@ class AddCombatUseCaseTest {
     @Test
     void propagatesGroupAccessDenialUnchangedWithoutSaving() {
         Scenario scenario = scenario();
-        AddCombatUseCase useCase = new AddCombatUseCase(scenario.groupLoader(), scenario.roundRepository());
+        AddCombatService useCase = new AddCombatService(scenario.groupLoader(), scenario.roundRepository());
         Combat availableCombat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
 

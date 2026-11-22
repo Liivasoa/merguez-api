@@ -72,13 +72,13 @@ import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureConflictException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
-import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
-import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
-import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
+import mg.msys.merguez_api.group.application.usecase.AddCombatService;
+import mg.msys.merguez_api.group.application.usecase.AddRoundService;
+import mg.msys.merguez_api.group.application.usecase.CloseRoundService;
+import mg.msys.merguez_api.group.application.usecase.CloseSessionService;
+import mg.msys.merguez_api.group.application.usecase.CreateSessionService;
+import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsService;
+import mg.msys.merguez_api.group.application.usecase.StartSessionService;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
@@ -469,8 +469,8 @@ class MongoSessionOccurrenceRepositoryTest {
             return Optional.of(snapshot);
         };
         LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
-        CloseSessionUseCase useCase =
-                new CloseSessionUseCase(racingLoader, groupRepository, closedOccurrenceSaver, logger);
+        CloseSessionService useCase =
+                new CloseSessionService(racingLoader, groupRepository, closedOccurrenceSaver, logger);
 
         assertAll(
                 () -> {
@@ -533,8 +533,8 @@ class MongoSessionOccurrenceRepositoryTest {
             return Optional.of(snapshot);
         };
         LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
-        CloseSessionUseCase useCase =
-                new CloseSessionUseCase(racingLoader, groupRepository, closedOccurrenceSaver, logger);
+        CloseSessionService useCase =
+                new CloseSessionService(racingLoader, groupRepository, closedOccurrenceSaver, logger);
 
         assertAll(
                 () -> {
@@ -574,8 +574,8 @@ class MongoSessionOccurrenceRepositoryTest {
         assertNotNull(before);
         assertFalse(before.containsKey("roundsRevision"));
         LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
-        CloseSessionUseCase useCase =
-                new CloseSessionUseCase(activeOccurrenceLoader, groupRepository, closedOccurrenceSaver, logger);
+        CloseSessionService useCase =
+                new CloseSessionService(activeOccurrenceLoader, groupRepository, closedOccurrenceSaver, logger);
 
         var result = useCase.execute(new CloseSessionCommand(group.id(), admin, session.id()));
 
@@ -624,8 +624,8 @@ class MongoSessionOccurrenceRepositoryTest {
             return Optional.of(snapshot);
         };
         LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
-        CloseSessionUseCase useCase =
-                new CloseSessionUseCase(racingLoader, groupRepository, closedOccurrenceSaver, logger);
+        CloseSessionService useCase =
+                new CloseSessionService(racingLoader, groupRepository, closedOccurrenceSaver, logger);
 
         assertAll(
                 () -> {
@@ -691,9 +691,9 @@ class MongoSessionOccurrenceRepositoryTest {
                 new Combat(List.of(admin, member), Optional.empty())));
         roundRepository.create(initial);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new GroupRoundController(
-                new AddRoundUseCase(activeOccurrenceLoader, roundRepository),
-                mock(AddCombatUseCase.class),
-                new CloseRoundUseCase(activeOccurrenceLoader, roundRepository))).build();
+                new AddRoundService(activeOccurrenceLoader, roundRepository),
+                mock(AddCombatService.class),
+                new CloseRoundService(activeOccurrenceLoader, roundRepository))).build();
 
         mvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", group.id().value())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -707,7 +707,7 @@ class MongoSessionOccurrenceRepositoryTest {
         Round stored = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow().rounds(occurrence).getFirst();
         assertEquals(RoundStatus.CLOSED, stored.status());
         assertEquals(Optional.of(member), stored.combats().getFirst().winner());
-        Round next = new AddRoundUseCase(activeOccurrenceLoader, roundRepository).execute(
+        Round next = new AddRoundService(activeOccurrenceLoader, roundRepository).execute(
                 new AddRoundCommand(group.id(), admin, List.of(initial.combats().getFirst())));
         assertEquals(2, next.number());
     }
@@ -780,7 +780,7 @@ class MongoSessionOccurrenceRepositoryTest {
             }
             return result;
         };
-        AddRoundUseCase useCase = new AddRoundUseCase(simultaneousLoader, roundRepository);
+        AddRoundService useCase = new AddRoundService(simultaneousLoader, roundRepository);
         AddRoundCommand command = new AddRoundCommand(group.id(), admin,
                 List.of(new Combat(List.of(first, second), Optional.empty())));
         ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -801,7 +801,7 @@ class MongoSessionOccurrenceRepositoryTest {
         }
     }
 
-    private static boolean tryAddRound(AddRoundUseCase useCase, AddRoundCommand command) {
+    private static boolean tryAddRound(AddRoundService useCase, AddRoundCommand command) {
         try {
             useCase.execute(command);
             return true;
@@ -993,10 +993,10 @@ class MongoSessionOccurrenceRepositoryTest {
 
     private MockMvc startMvc(SessionOccurrenceRepository occurrences) {
         return MockMvcBuilders.standaloneSetup(new GroupSessionController(
-                mock(CreateSessionUseCase.class),
-                mock(GetGroupSessionsUseCase.class),
-                new StartSessionUseCase(groupRepository, occurrences),
-                mock(CloseSessionUseCase.class))).build();
+                mock(CreateSessionService.class),
+                mock(GetGroupSessionsService.class),
+                new StartSessionService(groupRepository, occurrences),
+                mock(CloseSessionService.class))).build();
     }
 
     private static boolean hasCause(Throwable failure, Class<? extends Throwable> type) {

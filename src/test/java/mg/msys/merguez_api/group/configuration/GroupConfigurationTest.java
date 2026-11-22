@@ -13,14 +13,14 @@ import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
-import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
-import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
-import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
-import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.AddCombatUseCase;
+import mg.msys.merguez_api.group.application.port.in.AddRoundUseCase;
+import mg.msys.merguez_api.group.application.port.in.CloseRoundUseCase;
+import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
+import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
 
 class GroupConfigurationTest {
 

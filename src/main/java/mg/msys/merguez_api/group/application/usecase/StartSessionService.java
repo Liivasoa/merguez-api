@@ -2,6 +2,7 @@ package mg.msys.merguez_api.group.application.usecase;
 
 import java.util.Objects;
 
+import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
 import mg.msys.merguez_api.group.application.exception.ScheduledSessionNotFoundException;
@@ -11,18 +12,19 @@ import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepositor
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 
-public final class StartSessionUseCase {
+public final class StartSessionService implements StartSessionUseCase {
 
     private final GroupRepository groupRepository;
     private final SessionOccurrenceRepository occurrenceRepository;
 
-    public StartSessionUseCase(
+    public StartSessionService(
             GroupRepository groupRepository,
             SessionOccurrenceRepository occurrenceRepository) {
         this.groupRepository = Objects.requireNonNull(groupRepository);
         this.occurrenceRepository = Objects.requireNonNull(occurrenceRepository);
     }
 
+    @Override
     public SessionOccurrence execute(StartSessionCommand command) {
         Group group = groupRepository.findById(command.groupId())
                 .orElseThrow(() -> new GroupNotFoundException(command.groupId()));

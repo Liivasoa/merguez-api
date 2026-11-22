@@ -23,7 +23,7 @@ import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.RoundStatus;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
-class CloseRoundUseCaseTest {
+class CloseRoundServiceTest {
 
     @Test
     void savesClosedRoundAndRejectsMissingRoundWithoutSaving() {
@@ -36,7 +36,7 @@ class CloseRoundUseCaseTest {
         Round round = group.addRound(admin, occurrence, List.of(initial));
         Combat result = new Combat(initial.participants(), Optional.of(member));
         RoundRepository repository = mock(RoundRepository.class);
-        CloseRoundUseCase useCase = new CloseRoundUseCase(id -> Optional.of(group), repository);
+        CloseRoundService useCase = new CloseRoundService(id -> Optional.of(group), repository);
 
         assertThrows(RoundOperationRefusedException.class, () -> useCase.execute(
                 new CloseRoundCommand(group.id(), admin, 2, List.of(result))));

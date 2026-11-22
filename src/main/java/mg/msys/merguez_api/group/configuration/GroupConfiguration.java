@@ -9,14 +9,22 @@ import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
-import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
-import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
-import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
-import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.AddCombatUseCase;
+import mg.msys.merguez_api.group.application.port.in.AddRoundUseCase;
+import mg.msys.merguez_api.group.application.port.in.CloseRoundUseCase;
+import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
+import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
+import mg.msys.merguez_api.group.application.usecase.AddCombatService;
+import mg.msys.merguez_api.group.application.usecase.AddRoundService;
+import mg.msys.merguez_api.group.application.usecase.CloseRoundService;
+import mg.msys.merguez_api.group.application.usecase.CloseSessionService;
+import mg.msys.merguez_api.group.application.usecase.CreateGroupService;
+import mg.msys.merguez_api.group.application.usecase.CreateSessionService;
+import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsService;
+import mg.msys.merguez_api.group.application.usecase.StartSessionService;
 
 @Configuration
 public class GroupConfiguration {
@@ -27,49 +35,49 @@ public class GroupConfiguration {
             GroupRepository groupRepository,
             SaveClosedSessionOccurrencePort occurrenceSaver,
             LogSessionClosurePort closureLogger) {
-        return new CloseSessionUseCase(groupLoader, groupRepository, occurrenceSaver, closureLogger);
+        return new CloseSessionService(groupLoader, groupRepository, occurrenceSaver, closureLogger);
     }
 
     @Bean
     CloseRoundUseCase closeRoundUseCase(
             LoadGroupWithActiveOccurrencePort groupLoader,
             RoundRepository roundRepository) {
-        return new CloseRoundUseCase(groupLoader, roundRepository);
+        return new CloseRoundService(groupLoader, roundRepository);
     }
 
     @Bean
     AddRoundUseCase addRoundUseCase(
             LoadGroupWithActiveOccurrencePort groupLoader,
             RoundRepository roundRepository) {
-        return new AddRoundUseCase(groupLoader, roundRepository);
+        return new AddRoundService(groupLoader, roundRepository);
     }
 
     @Bean
     AddCombatUseCase addCombatUseCase(
             LoadGroupWithActiveOccurrencePort groupLoader,
             RoundRepository roundRepository) {
-        return new AddCombatUseCase(groupLoader, roundRepository);
+        return new AddCombatService(groupLoader, roundRepository);
     }
 
     @Bean
     CreateGroupUseCase createGroupUseCase(GroupRepository groupRepository) {
-        return new CreateGroupUseCase(groupRepository);
+        return new CreateGroupService(groupRepository);
     }
 
     @Bean
     CreateSessionUseCase createSessionUseCase(GroupRepository groupRepository) {
-        return new CreateSessionUseCase(groupRepository);
+        return new CreateSessionService(groupRepository);
     }
 
     @Bean
     GetGroupSessionsUseCase getGroupSessionsUseCase(GroupRepository groupRepository) {
-        return new GetGroupSessionsUseCase(groupRepository);
+        return new GetGroupSessionsService(groupRepository);
     }
 
     @Bean
     StartSessionUseCase startSessionUseCase(
             GroupRepository groupRepository,
             SessionOccurrenceRepository occurrenceRepository) {
-        return new StartSessionUseCase(groupRepository, occurrenceRepository);
+        return new StartSessionService(groupRepository, occurrenceRepository);
     }
 }

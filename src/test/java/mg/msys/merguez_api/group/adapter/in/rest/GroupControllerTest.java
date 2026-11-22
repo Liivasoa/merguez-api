@@ -65,14 +65,22 @@ import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
-import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
-import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
-import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.AddCombatUseCase;
+import mg.msys.merguez_api.group.application.port.in.AddRoundUseCase;
+import mg.msys.merguez_api.group.application.port.in.CloseRoundUseCase;
+import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
+import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
+import mg.msys.merguez_api.group.application.usecase.AddRoundService;
+import mg.msys.merguez_api.group.application.usecase.AddCombatService;
+import mg.msys.merguez_api.group.application.usecase.CloseRoundService;
+import mg.msys.merguez_api.group.application.usecase.CloseSessionService;
+import mg.msys.merguez_api.group.application.usecase.CreateGroupService;
+import mg.msys.merguez_api.group.application.usecase.CreateSessionService;
+import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsService;
+import mg.msys.merguez_api.group.application.usecase.StartSessionService;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 import mg.msys.merguez_api.group.domain.model.Combat;
@@ -93,28 +101,28 @@ class GroupControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private CreateGroupUseCase createGroupUseCase;
+    private CreateGroupUseCase CreateGroupService;
 
     @MockitoBean
-    private CreateSessionUseCase createSessionUseCase;
+    private CreateSessionUseCase CreateSessionService;
 
     @MockitoBean
-    private GetGroupSessionsUseCase getGroupSessionsUseCase;
+    private GetGroupSessionsUseCase GetGroupSessionsService;
 
     @MockitoBean
-    private StartSessionUseCase startSessionUseCase;
+    private StartSessionUseCase StartSessionService;
 
     @MockitoBean
-    private AddRoundUseCase addRoundUseCase;
+    private AddRoundUseCase AddRoundService;
 
     @MockitoBean
-    private AddCombatUseCase addCombatUseCase;
+    private AddCombatUseCase AddCombatService;
 
     @MockitoBean
-    private CloseRoundUseCase closeRoundUseCase;
+    private CloseRoundUseCase CloseRoundService;
 
     @MockitoBean
-    private CloseSessionUseCase closeSessionUseCase;
+    private CloseSessionUseCase CloseSessionService;
 
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {"save", "log", "load", "empty snapshot", "other occurrence snapshot"})
@@ -140,9 +148,9 @@ class GroupControllerTest {
             case "load" -> when(loader.loadByGroupId(group.id())).thenThrow(failure);
             default -> throw new AssertionError(failingPort);
         }
-        CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
+        CloseSessionService realUseCase = new CloseSessionService(loader, groups, saver, logger);
         MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupSessionController(
-                createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase, realUseCase))
+                CreateSessionService, GetGroupSessionsService, StartSessionService, realUseCase))
                 .setControllerAdvice(new GroupExceptionHandler()).build();
 
         ServletException thrown = assertThrows(ServletException.class,
@@ -182,7 +190,7 @@ class GroupControllerTest {
         assertTrue(result.occurrence().isClosed());
         assertEquals(Map.of(requester, 1, debtor, -1, inactive, 0), result.netScores());
         assertEquals(List.of(new SessionPayment(debtor, requester, 1)), result.payments());
-        when(closeSessionUseCase.execute(any(CloseSessionCommand.class))).thenReturn(result);
+        when(CloseSessionService.execute(any(CloseSessionCommand.class))).thenReturn(result);
 
         mockMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
                         group.id().value(), session.id())
@@ -204,7 +212,7 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.payments[0].creditorId").value(requester.value().toString()))
                 .andExpect(jsonPath("$.payments[0].amount").value(1));
 
-        verify(closeSessionUseCase).execute(new CloseSessionCommand(group.id(), requester, session.id()));
+        verify(CloseSessionService).execute(new CloseSessionCommand(group.id(), requester, session.id()));
     }
 
     @ParameterizedTest
@@ -216,7 +224,7 @@ class GroupControllerTest {
                 .content(body))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(closeSessionUseCase);
+        verifyNoInteractions(CloseSessionService);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -227,7 +235,7 @@ class GroupControllerTest {
         UserId requester = new UserId(UUID.randomUUID());
         String sensitiveDetail = "private diagnostic " + UUID.randomUUID();
         CloseSessionCommand command = new CloseSessionCommand(groupId, requester, sessionId);
-        when(closeSessionUseCase.execute(command))
+        when(CloseSessionService.execute(command))
                 .thenThrow(new SessionClosureRefusedException(
                         new IllegalStateException(domainMessage + ": " + sensitiveDetail)));
 
@@ -242,7 +250,7 @@ class GroupControllerTest {
                 .andExpect(content().string(not(containsString(domainMessage))))
                 .andExpect(content().string(not(containsString(sensitiveDetail))));
 
-        verify(closeSessionUseCase).execute(command);
+        verify(CloseSessionService).execute(command);
     }
 
     static Stream<String> sessionClosureRefusals() {
@@ -288,9 +296,9 @@ class GroupControllerTest {
                 default -> throw new AssertionError(refusal);
             };
         }
-        CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
+        CloseSessionService realUseCase = new CloseSessionService(loader, groups, saver, logger);
         MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupSessionController(
-                createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase, realUseCase))
+                CreateSessionService, GetGroupSessionsService, StartSessionService, realUseCase))
                 .setControllerAdvice(new GroupExceptionHandler()).build();
 
         standaloneMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
@@ -324,9 +332,9 @@ class GroupControllerTest {
             when(loader.loadByGroupId(group.id())).thenReturn(Optional.empty());
             when(groups.findById(group.id())).thenReturn(Optional.empty());
         }
-        CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
+        CloseSessionService realUseCase = new CloseSessionService(loader, groups, saver, logger);
         MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupSessionController(
-                createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase, realUseCase))
+                CreateSessionService, GetGroupSessionsService, StartSessionService, realUseCase))
                 .setControllerAdvice(new GroupExceptionHandler()).build();
 
         standaloneMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
@@ -346,7 +354,7 @@ class GroupControllerTest {
         Combat combat = new Combat(List.of(requester, member), Optional.of(member));
         Round closed = new Round(new SessionOccurrence(groupId, UUID.randomUUID(), Instant.now()),
                 1, RoundStatus.CLOSED, List.of(combat));
-        when(closeRoundUseCase.execute(any(CloseRoundCommand.class))).thenReturn(closed);
+        when(CloseRoundService.execute(any(CloseRoundCommand.class))).thenReturn(closed);
 
         mockMvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", groupId.value())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -357,7 +365,7 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.status").value("CLOSED"))
                 .andExpect(jsonPath("$.combats[0].winnerId").value(member.value().toString()));
 
-        verify(closeRoundUseCase).execute(new CloseRoundCommand(groupId, requester, 1, List.of(combat)));
+        verify(CloseRoundService).execute(new CloseRoundCommand(groupId, requester, 1, List.of(combat)));
     }
 
     @Test
@@ -369,7 +377,7 @@ class GroupControllerTest {
                         {"requesterId":"%s","combats":[{"participantIds":["%s","%s"],"winnerId":"%s"}]}
                         """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())))
                 .andExpect(status().isBadRequest());
-        verifyNoInteractions(closeRoundUseCase);
+        verifyNoInteractions(CloseRoundService);
     }
 
     @Test
@@ -377,7 +385,7 @@ class GroupControllerTest {
         UUID groupId = UUID.randomUUID();
         UUID requester = UUID.randomUUID();
         UUID member = UUID.randomUUID();
-        when(closeRoundUseCase.execute(any(CloseRoundCommand.class)))
+        when(CloseRoundService.execute(any(CloseRoundCommand.class)))
                 .thenThrow(new RoundOperationRefusedException(new IllegalStateException("private diagnostic")));
 
         mockMvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", groupId)
@@ -396,7 +404,7 @@ class GroupControllerTest {
         UUID scheduledSessionId = UUID.randomUUID();
         UserId requester = new UserId(UUID.randomUUID());
         Instant startedAt = Instant.parse("2026-11-16T21:13:53Z");
-        when(startSessionUseCase.execute(any(StartSessionCommand.class)))
+        when(StartSessionService.execute(any(StartSessionCommand.class)))
                 .thenReturn(new SessionOccurrence(groupId, scheduledSessionId, startedAt));
         String requestBody = """
                 {
@@ -416,7 +424,7 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.scheduleId").value(scheduledSessionId.toString()))
                 .andExpect(jsonPath("$.startedAt").value(startedAt.toString()));
 
-        verify(startSessionUseCase).execute(new StartSessionCommand(groupId, requester, scheduledSessionId));
+        verify(StartSessionService).execute(new StartSessionCommand(groupId, requester, scheduledSessionId));
     }
 
     @Test
@@ -432,7 +440,7 @@ class GroupControllerTest {
                 new SessionOccurrence(groupId, UUID.randomUUID(), Instant.parse("2026-11-16T21:13:53Z")),
                 1,
                 combats);
-        when(addRoundUseCase.execute(any(AddRoundCommand.class))).thenReturn(round);
+        when(AddRoundService.execute(any(AddRoundCommand.class))).thenReturn(round);
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -457,7 +465,7 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.combats[0].participantIds[1]").value(secondMember.value().toString()))
                 .andExpect(jsonPath("$.combats[0].winnerId").value(firstMember.value().toString()));
 
-        verify(addRoundUseCase).execute(new AddRoundCommand(groupId, requester, combats));
+        verify(AddRoundService).execute(new AddRoundCommand(groupId, requester, combats));
     }
 
     @Test
@@ -477,7 +485,7 @@ class GroupControllerTest {
                 new SessionOccurrence(groupId, UUID.randomUUID(), Instant.parse("2026-11-16T21:13:53Z")),
                 roundNumber,
                 combats);
-        when(addCombatUseCase.execute(any(AddCombatCommand.class))).thenReturn(updatedRound);
+        when(AddCombatService.execute(any(AddCombatCommand.class))).thenReturn(updatedRound);
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -505,7 +513,7 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.combats[1].participantIds[1]").value(secondMember.value().toString()))
                 .andExpect(jsonPath("$.combats[1].winnerId").value(is((Object) null)));
 
-        verify(addCombatUseCase).execute(new AddCombatCommand(
+        verify(AddCombatService).execute(new AddCombatCommand(
                 groupId,
                 requester,
                 roundNumber,
@@ -525,7 +533,7 @@ class GroupControllerTest {
         RuntimeException cause = exceptionType.equals("IllegalStateException")
                 ? new IllegalStateException(sensitiveDetail)
                 : new IllegalArgumentException(sensitiveDetail);
-        when(addRoundUseCase.execute(any(AddRoundCommand.class)))
+        when(AddRoundService.execute(any(AddRoundCommand.class)))
                 .thenThrow(new RoundOperationRefusedException(cause));
         String requestBody = """
                 {
@@ -549,7 +557,7 @@ class GroupControllerTest {
 
         assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
         assertFalse(result.getResponse().getContentAsString().contains(sensitiveDetail));
-        verify(addRoundUseCase).execute(new AddRoundCommand(
+        verify(AddRoundService).execute(new AddRoundCommand(
                 groupId,
                 requester,
                 List.of(new Combat(List.of(firstMember, secondMember), Optional.empty()))));
@@ -569,7 +577,7 @@ class GroupControllerTest {
         RuntimeException cause = exceptionType.equals("IllegalStateException")
                 ? new IllegalStateException(sensitiveDetail)
                 : new IllegalArgumentException(sensitiveDetail);
-        when(addCombatUseCase.execute(any(AddCombatCommand.class)))
+        when(AddCombatService.execute(any(AddCombatCommand.class)))
                 .thenThrow(new RoundOperationRefusedException(cause));
         String requestBody = """
                 {
@@ -592,7 +600,7 @@ class GroupControllerTest {
 
         assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
         assertFalse(result.getResponse().getContentAsString().contains(sensitiveDetail));
-        verify(addCombatUseCase).execute(new AddCombatCommand(
+        verify(AddCombatService).execute(new AddCombatCommand(
                 groupId,
                 requester,
                 roundNumber,
@@ -611,7 +619,7 @@ class GroupControllerTest {
     void createRoundPropagatesTechnicalException(String exceptionType, RuntimeException technicalFailure)
             throws Exception {
         GroupId groupId = GroupId.random();
-        when(addRoundUseCase.execute(any(AddRoundCommand.class))).thenThrow(technicalFailure);
+        when(AddRoundService.execute(any(AddRoundCommand.class))).thenThrow(technicalFailure);
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -639,7 +647,7 @@ class GroupControllerTest {
             throws Exception {
         GroupId groupId = GroupId.random();
         int roundNumber = 2;
-        when(addCombatUseCase.execute(any(AddCombatCommand.class))).thenThrow(technicalFailure);
+        when(AddCombatService.execute(any(AddCombatCommand.class))).thenThrow(technicalFailure);
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -670,7 +678,7 @@ class GroupControllerTest {
     void createRoundDeniedForNonMemberReturnsForbidden() throws Exception {
         GroupId groupId = GroupId.random();
         String sensitiveDetail = "sensitive internal access details";
-        when(addRoundUseCase.execute(any(AddRoundCommand.class)))
+        when(AddRoundService.execute(any(AddRoundCommand.class)))
                 .thenThrow(new GroupAccessDeniedException(sensitiveDetail));
         String requestBody = """
                 {
@@ -698,7 +706,7 @@ class GroupControllerTest {
         GroupId groupId = GroupId.random();
         int roundNumber = 2;
         String sensitiveDetail = "sensitive internal access details";
-        when(addCombatUseCase.execute(any(AddCombatCommand.class)))
+        when(AddCombatService.execute(any(AddCombatCommand.class)))
                 .thenThrow(new GroupAccessDeniedException(sensitiveDetail));
         String requestBody = """
                 {
@@ -738,7 +746,7 @@ class GroupControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verifyNoInteractions(addRoundUseCase);
+        verifyNoInteractions(AddRoundService);
     }
 
     @Test
@@ -765,7 +773,7 @@ class GroupControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
 
-        verifyNoInteractions(addRoundUseCase);
+        verifyNoInteractions(AddRoundService);
     }
 
     static Stream<Arguments> invalidCreateRoundRequests() {
@@ -807,7 +815,7 @@ class GroupControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verifyNoInteractions(addCombatUseCase);
+        verifyNoInteractions(AddCombatService);
     }
 
     @Test
@@ -833,7 +841,7 @@ class GroupControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
 
-        verifyNoInteractions(addCombatUseCase);
+        verifyNoInteractions(AddCombatService);
     }
 
     static Stream<Arguments> invalidAddCombatRequests() {
@@ -877,7 +885,7 @@ class GroupControllerTest {
         assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
         assertFalse(result.getResponse().getContentAsString()
                 .contains("A combat must have exactly two distinct participants"));
-        verifyNoInteractions(addRoundUseCase);
+        verifyNoInteractions(AddRoundService);
     }
 
     @Test
@@ -908,7 +916,7 @@ class GroupControllerTest {
         assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
         assertFalse(result.getResponse().getContentAsString()
                 .contains("A combat must have exactly two distinct participants"));
-        verifyNoInteractions(addCombatUseCase);
+        verifyNoInteractions(AddCombatService);
     }
 
     @Test
@@ -926,8 +934,8 @@ class GroupControllerTest {
                 new StartSessionCommand(activeGroupId, activeGroupRequester, refusedScheduleId);
         StartSessionCommand allowedCommand =
                 new StartSessionCommand(otherGroupId, otherGroupRequester, allowedScheduleId);
-        when(startSessionUseCase.execute(refusedCommand)).thenThrow(new IllegalStateException(sensitiveDetail));
-        when(startSessionUseCase.execute(allowedCommand))
+        when(StartSessionService.execute(refusedCommand)).thenThrow(new IllegalStateException(sensitiveDetail));
+        when(StartSessionService.execute(allowedCommand))
                 .thenReturn(new SessionOccurrence(otherGroupId, allowedScheduleId, startedAt));
 
         assertAll(
@@ -953,8 +961,8 @@ class GroupControllerTest {
                         .andExpect(jsonPath("$.groupId").value(otherGroupId.value().toString()))
                         .andExpect(jsonPath("$.scheduleId").value(allowedScheduleId.toString()))
                         .andExpect(jsonPath("$.startedAt").value(startedAt.toString())),
-                () -> verify(startSessionUseCase).execute(refusedCommand),
-                () -> verify(startSessionUseCase).execute(allowedCommand));
+                () -> verify(StartSessionService).execute(refusedCommand),
+                () -> verify(StartSessionService).execute(allowedCommand));
     }
 
     @Test
@@ -964,10 +972,10 @@ class GroupControllerTest {
         GroupRepository repository = mock(GroupRepository.class);
         when(repository.findById(groupId)).thenReturn(Optional.empty());
         MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupSessionController(
-                new CreateSessionUseCase(repository),
-                new GetGroupSessionsUseCase(repository),
-                startSessionUseCase,
-                closeSessionUseCase))
+                new CreateSessionService(repository),
+                new GetGroupSessionsService(repository),
+                StartSessionService,
+                CloseSessionService))
                 .setControllerAdvice(new GroupExceptionHandler())
                 .build();
         String requestBody = """
@@ -1003,7 +1011,7 @@ class GroupControllerTest {
         UserId requester = new UserId(UUID.randomUUID());
         DayOfWeek day = DayOfWeek.TUESDAY;
         LocalTime startTime = LocalTime.of(14, 30);
-        when(createSessionUseCase.execute(any(CreateSessionCommand.class)))
+        when(CreateSessionService.execute(any(CreateSessionCommand.class)))
                 .thenReturn(new Session(groupId, UUID.randomUUID(), "Created session", day, startTime));
         String requestBody = """
                 {
@@ -1018,7 +1026,7 @@ class GroupControllerTest {
                 .content(requestBody))
                 .andExpect(status().is2xxSuccessful());
 
-        verify(createSessionUseCase).execute(
+        verify(CreateSessionService).execute(
                 new CreateSessionCommand(groupId, requester, expectedName, day, startTime));
     }
 
@@ -1035,7 +1043,7 @@ class GroupControllerTest {
         GroupId groupId = GroupId.random();
         UserId requester = new UserId(UUID.randomUUID());
         String sensitiveDetail = "sensitive internal access details";
-        when(createSessionUseCase.execute(any(CreateSessionCommand.class)))
+        when(CreateSessionService.execute(any(CreateSessionCommand.class)))
                 .thenThrow(new GroupAccessDeniedException(sensitiveDetail));
         String requestBody = """
                 {
@@ -1054,7 +1062,7 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(content().string(not(containsString(sensitiveDetail))));
 
-        verify(createSessionUseCase).execute(new CreateSessionCommand(
+        verify(CreateSessionService).execute(new CreateSessionCommand(
                 groupId, requester, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 30)));
     }
 
@@ -1077,7 +1085,7 @@ class GroupControllerTest {
                 .content(requestBody))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(createSessionUseCase);
+        verifyNoInteractions(CreateSessionService);
     }
 
     private static Stream<Arguments> missingSessionScheduleFields() {
@@ -1093,8 +1101,8 @@ class GroupControllerTest {
         UserId requester = new UserId(UUID.randomUUID());
         LocalTime startTime = LocalTime.of(14, 30);
         Session session = new Session(groupId, UUID.randomUUID(), "Evening training", DayOfWeek.TUESDAY, startTime);
-        when(createSessionUseCase.execute(any(CreateSessionCommand.class))).thenReturn(session);
-        when(getGroupSessionsUseCase.execute(groupId)).thenReturn(List.of(session));
+        when(CreateSessionService.execute(any(CreateSessionCommand.class))).thenReturn(session);
+        when(GetGroupSessionsService.execute(groupId)).thenReturn(List.of(session));
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -1108,7 +1116,7 @@ class GroupControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(requestBody))
                 .andExpect(status().is2xxSuccessful());
-        verify(createSessionUseCase).execute(new CreateSessionCommand(
+        verify(CreateSessionService).execute(new CreateSessionCommand(
                 groupId, requester, session.name(), session.day(), startTime));
 
         mockMvc.perform(get("/api/v1/groups/{groupId}/sessions", groupId.value()))
@@ -1118,7 +1126,7 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$[0].name").value(session.name()))
                 .andExpect(jsonPath("$[0].day").value("TUESDAY"))
                 .andExpect(jsonPath("$[0].startTime").value(anyOf(is("14:30"), is("14:30:00"))));
-        verify(getGroupSessionsUseCase).execute(groupId);
+        verify(GetGroupSessionsService).execute(groupId);
     }
 
     @Test
@@ -1129,7 +1137,7 @@ class GroupControllerTest {
         UserId participantId = new UserId(UUID.randomUUID());
         // And the CreateGroup use case returns the group "Dojo du mardi"
         Group group = Group.create("Dojo du mardi", "Séances entre amis", creatorId, List.of(participantId));
-        when(createGroupUseCase.execute(any(CreateGroupCommand.class))).thenReturn(group);
+        when(CreateGroupService.execute(any(CreateGroupCommand.class))).thenReturn(group);
         // And a valid creation request with a description and Bob as a participant
         String requestBody = """
                 {
@@ -1162,7 +1170,7 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.members[1].role").value("MEMBER"));
         // And the use case was executed with the command mapped from the request
         ArgumentCaptor<CreateGroupCommand> commandCaptor = ArgumentCaptor.forClass(CreateGroupCommand.class);
-        verify(createGroupUseCase).execute(commandCaptor.capture());
+        verify(CreateGroupService).execute(commandCaptor.capture());
         assertEquals(
                 new CreateGroupCommand(creatorId, "Dojo du mardi", "Séances entre amis", List.of(participantId)),
                 commandCaptor.getValue());
@@ -1197,7 +1205,7 @@ class GroupControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(400));
         // And the use case was never executed
-        verifyNoInteractions(createGroupUseCase);
+        verifyNoInteractions(CreateGroupService);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -1231,7 +1239,7 @@ class GroupControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(400));
         // And the use case was never executed
-        verifyNoInteractions(createGroupUseCase);
+        verifyNoInteractions(CreateGroupService);
     }
 
     @Test
@@ -1257,7 +1265,7 @@ class GroupControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(400));
         // And the use case was never executed
-        verifyNoInteractions(createGroupUseCase);
+        verifyNoInteractions(CreateGroupService);
     }
 
     @Test
@@ -1267,7 +1275,7 @@ class GroupControllerTest {
         UserId creatorId = new UserId(UUID.randomUUID());
         UserId participantId = new UserId(UUID.randomUUID());
         // And the CreateGroup use case refuses the request with a domain exception
-        when(createGroupUseCase.execute(any(CreateGroupCommand.class)))
+        when(CreateGroupService.execute(any(CreateGroupCommand.class)))
                 .thenThrow(new InvalidGroupException("Group name is required"));
         // And a syntactically valid creation request
         String requestBody = """

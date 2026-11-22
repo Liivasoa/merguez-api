@@ -39,7 +39,7 @@ import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
-class StartSessionUseCaseTest {
+class StartSessionServiceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"admin", "member"})
@@ -52,7 +52,7 @@ class StartSessionUseCaseTest {
                 group.createSession(admin, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
         InMemoryGroupRepository groupRepository = new InMemoryGroupRepository(group);
         InMemorySessionOccurrenceRepository occurrenceRepository = new InMemorySessionOccurrenceRepository();
-        StartSessionUseCase useCase = new StartSessionUseCase(groupRepository, occurrenceRepository);
+        StartSessionService useCase = new StartSessionService(groupRepository, occurrenceRepository);
         StartSessionCommand command = new StartSessionCommand(group.id(), requester, scheduledSession.id());
 
         SessionOccurrence result = useCase.execute(command);
@@ -80,7 +80,7 @@ class StartSessionUseCaseTest {
                 admin, "Selected session", DayOfWeek.TUESDAY, LocalTime.of(11, 0));
         InMemoryGroupRepository groupRepository = new InMemoryGroupRepository(group);
         InMemorySessionOccurrenceRepository occurrenceRepository = new InMemorySessionOccurrenceRepository();
-        StartSessionUseCase useCase = new StartSessionUseCase(groupRepository, occurrenceRepository);
+        StartSessionService useCase = new StartSessionService(groupRepository, occurrenceRepository);
 
         SessionOccurrence result = useCase.execute(
                 new StartSessionCommand(group.id(), member, selectedSchedule.id()));
@@ -108,7 +108,7 @@ class StartSessionUseCaseTest {
         Session originalAnotherSchedule = originalGroup.createSession(
                 firstAdmin, "Another session", DayOfWeek.TUESDAY, LocalTime.of(10, 0));
         InMemorySessionOccurrenceRepository occurrenceRepository = new InMemorySessionOccurrenceRepository();
-        StartSessionUseCase initialUseCase = new StartSessionUseCase(
+        StartSessionService initialUseCase = new StartSessionService(
                 new InMemoryGroupRepository(originalGroup), occurrenceRepository);
         SessionOccurrence firstOccurrence = initialUseCase.execute(
                 new StartSessionCommand(firstGroupId, firstMember, firstSchedule.id()));
@@ -121,7 +121,7 @@ class StartSessionUseCaseTest {
         Session secondSchedule = secondGroup.createSession(
                 secondAdmin, "Second group session", DayOfWeek.MONDAY, LocalTime.of(10, 0));
         InMemoryGroupRepository groupRepository = new InMemoryGroupRepository(freshGroup, secondGroup);
-        StartSessionUseCase useCase = new StartSessionUseCase(groupRepository, occurrenceRepository);
+        StartSessionService useCase = new StartSessionService(groupRepository, occurrenceRepository);
 
         assertSame(freshGroup, groupRepository.findById(firstGroupId).orElseThrow());
         assertNotSame(originalGroup, freshGroup);
@@ -186,7 +186,7 @@ class StartSessionUseCaseTest {
         UserId requester = firstMember;
         UserId winner = secondMember;
         Combat combat = new Combat(List.of(firstMember, secondMember), Optional.of(winner));
-        AddRoundUseCase useCase = new AddRoundUseCase(groupLoader, roundRepository);
+        AddRoundService useCase = new AddRoundService(groupLoader, roundRepository);
 
         Round result = useCase.execute(new AddRoundCommand(groupId, requester, List.of(combat)));
 
@@ -229,7 +229,7 @@ class StartSessionUseCaseTest {
         assertNotSame(originalOccurrence, persistedOccurrence);
         assertEquals(List.of(), loadedGroup.rounds(persistedOccurrence));
 
-        AddRoundUseCase useCase = new AddRoundUseCase(groupLoader, roundRepository);
+        AddRoundService useCase = new AddRoundService(groupLoader, roundRepository);
         RoundOperationRefusedException exception = assertThrowsExactly(
                 RoundOperationRefusedException.class,
                 () -> useCase.execute(new AddRoundCommand(groupId, member, List.of())));
@@ -254,7 +254,7 @@ class StartSessionUseCaseTest {
         InMemoryRoundRepository rounds = new InMemoryRoundRepository();
         var loader = new ReloadingActiveOccurrenceGroupLoader(
                 group.id(), group.name(), admin, List.of(member), List.of(session), occurrences, rounds);
-        var useCase = new AddRoundUseCase(loader, rounds);
+        var useCase = new AddRoundService(loader, rounds);
         var combat = new Combat(List.of(admin, member), Optional.empty());
         var command = new AddRoundCommand(group.id(), member, List.of(combat));
         Round firstRound = useCase.execute(command);
@@ -274,7 +274,7 @@ class StartSessionUseCaseTest {
         Session session = group.createSession(admin, "Training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
         SessionOccurrence occurrence = group.startSession(admin, session);
         InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
-        AddRoundUseCase useCase = new AddRoundUseCase(id -> Optional.of(group), roundRepository);
+        AddRoundService useCase = new AddRoundService(id -> Optional.of(group), roundRepository);
         Combat combat = new Combat(List.of(admin, member), Optional.empty());
 
         GroupAccessDeniedException exception = assertThrowsExactly(
@@ -296,7 +296,7 @@ class StartSessionUseCaseTest {
         LoadGroupWithActiveOccurrencePort groupLoader = new ReloadingActiveOccurrenceGroupLoader(
                 groupId, "Training group", admin, List.of(member), List.of(),
                 new InMemorySessionOccurrenceRepository(), roundRepository);
-        AddRoundUseCase useCase = new AddRoundUseCase(groupLoader, roundRepository);
+        AddRoundService useCase = new AddRoundService(groupLoader, roundRepository);
         Combat combat = new Combat(List.of(admin, member), Optional.empty());
 
         assertTrue(groupLoader.loadByGroupId(groupId).isEmpty());
@@ -312,7 +312,7 @@ class StartSessionUseCaseTest {
         UserId member = userId();
         Group group = Group.restore(GroupId.random(), "Training group", null, admin, List.of(member));
         InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
-        AddRoundUseCase useCase = new AddRoundUseCase(id -> Optional.of(group), roundRepository);
+        AddRoundService useCase = new AddRoundService(id -> Optional.of(group), roundRepository);
         Combat combat = new Combat(List.of(admin, member), Optional.empty());
 
         IllegalStateException exception = assertThrowsExactly(
@@ -331,7 +331,7 @@ class StartSessionUseCaseTest {
         GroupId groupId = GroupId.random();
         IllegalArgumentException failure = new IllegalArgumentException("Corrupt persisted group");
         InMemoryRoundRepository roundRepository = new InMemoryRoundRepository();
-        AddRoundUseCase useCase = new AddRoundUseCase(id -> { throw failure; }, roundRepository);
+        AddRoundService useCase = new AddRoundService(id -> { throw failure; }, roundRepository);
         Combat combat = new Combat(List.of(admin, member), Optional.empty());
 
         IllegalArgumentException exception = assertThrowsExactly(
@@ -353,7 +353,7 @@ class StartSessionUseCaseTest {
         IllegalArgumentException failure = new IllegalArgumentException("Round storage failed");
         RoundRepository repository = mock(RoundRepository.class);
         doThrow(failure).when(repository).create(any(Round.class));
-        AddRoundUseCase useCase = new AddRoundUseCase(id -> Optional.of(group), repository);
+        AddRoundService useCase = new AddRoundService(id -> Optional.of(group), repository);
         Combat combat = new Combat(List.of(admin, member), Optional.empty());
 
         IllegalArgumentException exception = assertThrowsExactly(

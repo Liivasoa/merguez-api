@@ -15,9 +15,9 @@ import mg.msys.merguez_api.group.adapter.in.rest.request.AddCombatRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.request.CloseRoundRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.request.CreateRoundRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.response.RoundResponse;
-import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
-import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
-import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
+import mg.msys.merguez_api.group.application.port.in.AddCombatUseCase;
+import mg.msys.merguez_api.group.application.port.in.AddRoundUseCase;
+import mg.msys.merguez_api.group.application.port.in.CloseRoundUseCase;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 
 @RestController

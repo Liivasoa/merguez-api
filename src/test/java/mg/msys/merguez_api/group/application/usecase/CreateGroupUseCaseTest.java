@@ -20,7 +20,7 @@ import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
-class CreateGroupUseCaseTest {
+class CreateGroupServiceTest {
 
     @Test
     @DisplayName("The use case creates the group and saves it through the repository")
@@ -30,7 +30,7 @@ class CreateGroupUseCaseTest {
         UserId participantId = userId();
         // And a group repository
         InMemoryGroupRepository repository = new InMemoryGroupRepository();
-        CreateGroupUseCase useCase = new CreateGroupUseCase(repository);
+        CreateGroupService useCase = new CreateGroupService(repository);
         // And a command to create the group "Dojo du mardi" with a description and Bob as a participant
         CreateGroupCommand command = new CreateGroupCommand(
                 creatorId, "Dojo du mardi", "Séances entre amis", List.of(participantId));
@@ -60,7 +60,7 @@ class CreateGroupUseCaseTest {
         UserId participantId = userId();
         // And a group repository
         InMemoryGroupRepository repository = new InMemoryGroupRepository();
-        CreateGroupUseCase useCase = new CreateGroupUseCase(repository);
+        CreateGroupService useCase = new CreateGroupService(repository);
         // And a command with a blank name, which the domain refuses
         CreateGroupCommand command = new CreateGroupCommand(
                 creatorId, "  ", null, List.of(participantId));

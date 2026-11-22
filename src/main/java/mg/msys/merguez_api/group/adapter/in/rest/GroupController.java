@@ -12,7 +12,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import mg.msys.merguez_api.group.adapter.in.rest.request.CreateGroupRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.response.GroupResponse;
-import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
+import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
 import mg.msys.merguez_api.group.domain.model.Group;
 
 @RestController

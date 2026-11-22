@@ -57,7 +57,7 @@ import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.group.domain.model.SessionPayment;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
-class CloseSessionUseCaseTest {
+class CloseSessionServiceTest {
 
     @Test
     void adminClosesSessionAndLogsEachMembersResultAfterSaving() {
@@ -150,7 +150,7 @@ class CloseSessionUseCaseTest {
         GroupRepository groups = mock(GroupRepository.class);
         SaveClosedSessionOccurrencePort persistence = mock(SaveClosedSessionOccurrencePort.class);
         LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
-        CloseSessionUseCase useCase = new CloseSessionUseCase(loader, groups, persistence, logger);
+        CloseSessionService useCase = new CloseSessionService(loader, groups, persistence, logger);
         when(loader.loadByGroupId(group.id())).thenReturn(Optional.of(group));
 
         assertEquals(group.id(), activeSession.groupId());
@@ -282,7 +282,7 @@ class CloseSessionUseCaseTest {
         final SaveClosedSessionOccurrencePort persistence = mock(SaveClosedSessionOccurrencePort.class);
         final LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
         final AtomicReference<RuntimeException> domainFailure = new AtomicReference<>();
-        final CloseSessionUseCase useCase = new CloseSessionUseCase(loader, groups, persistence, logger);
+        final CloseSessionService useCase = new CloseSessionService(loader, groups, persistence, logger);
 
         RefusalFixture() {
             when(groups.findById(group.id())).thenReturn(Optional.of(group));
@@ -317,7 +317,7 @@ class CloseSessionUseCaseTest {
         final GroupRepository groups = mock(GroupRepository.class);
         final SaveClosedSessionOccurrencePort persistence = mock(SaveClosedSessionOccurrencePort.class);
         final LogSessionClosurePort logger = mock(LogSessionClosurePort.class);
-        final CloseSessionUseCase useCase = new CloseSessionUseCase(loader, groups, persistence, logger);
+        final CloseSessionService useCase = new CloseSessionService(loader, groups, persistence, logger);
         final Round closedRound;
 
         Fixture() {
