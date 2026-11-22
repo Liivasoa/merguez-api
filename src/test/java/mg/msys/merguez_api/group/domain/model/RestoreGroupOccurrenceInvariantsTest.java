@@ -1,6 +1,8 @@
 package mg.msys.merguez_api.group.domain.model;
 
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -48,6 +50,28 @@ class RestoreGroupOccurrenceInvariantsTest {
                 () -> fixture.restore(
                         fixture.occurrence(),
                         List.of(fixture.round(anotherOccurrence, 1))));
+    }
+
+    @Test
+    @DisplayName("A restored round allows closing its active session after another snapshot closes")
+    void restoredRoundAllowsClosingItsActiveSession() {
+        Fixture fixture = new Fixture();
+        SessionOccurrence activeOccurrence = fixture.occurrence();
+        SessionOccurrence previousOccurrence =
+                new SessionOccurrence(fixture.groupId(), fixture.session().id(), activeOccurrence.startedAt());
+        Round previousRound = fixture.round(previousOccurrence, 1);
+        Group previousGroup = fixture.restore(previousOccurrence, List.of(previousRound));
+        Group activeGroup = fixture.restore(activeOccurrence, List.of(previousRound));
+
+        previousGroup.closeRound(fixture.admin, previousRound, previousRound.combats());
+        previousGroup.closeSession(fixture.admin, previousOccurrence);
+
+        Round activeRound = fixture.round(activeOccurrence, 1);
+        Round closedRound = activeGroup.closeRound(fixture.admin, activeRound, activeRound.combats());
+        SessionClosureResult closure = activeGroup.closeSession(fixture.admin, closedRound.occurrence());
+
+        assertSame(activeOccurrence, closure.occurrence());
+        assertTrue(activeOccurrence.isClosed());
     }
 
     @Test
