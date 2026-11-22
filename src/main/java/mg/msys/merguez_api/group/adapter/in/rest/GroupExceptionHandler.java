@@ -13,7 +13,11 @@ import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedExce
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 
-@RestControllerAdvice(assignableTypes = GroupController.class)
+@RestControllerAdvice(assignableTypes = {
+        GroupController.class,
+        GroupSessionController.class,
+        GroupRoundController.class
+})
 class GroupExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GroupExceptionHandler.class);

@@ -59,7 +59,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
 
-import mg.msys.merguez_api.group.adapter.in.rest.GroupController;
+import mg.msys.merguez_api.group.adapter.in.rest.GroupRoundController;
+import mg.msys.merguez_api.group.adapter.in.rest.GroupSessionController;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
@@ -71,10 +72,10 @@ import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureConflictException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
+import mg.msys.merguez_api.group.application.usecase.AddCombatUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CloseRoundUseCase;
 import mg.msys.merguez_api.group.application.usecase.CloseSessionUseCase;
-import mg.msys.merguez_api.group.application.usecase.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsUseCase;
 import mg.msys.merguez_api.group.application.usecase.StartSessionUseCase;
@@ -689,13 +690,9 @@ class MongoSessionOccurrenceRepositoryTest {
         Round initial = new Round(occurrence, 1, List.of(
                 new Combat(List.of(admin, member), Optional.empty())));
         roundRepository.create(initial);
-        MockMvc mvc = MockMvcBuilders.standaloneSetup(new GroupController(
-                mock(CreateGroupUseCase.class),
-                mock(CreateSessionUseCase.class),
-                mock(GetGroupSessionsUseCase.class),
-                mock(StartSessionUseCase.class),
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new GroupRoundController(
                 new AddRoundUseCase(activeOccurrenceLoader, roundRepository),
-                null,
+                mock(AddCombatUseCase.class),
                 new CloseRoundUseCase(activeOccurrenceLoader, roundRepository))).build();
 
         mvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", group.id().value())
@@ -995,11 +992,11 @@ class MongoSessionOccurrenceRepositoryTest {
     }
 
     private MockMvc startMvc(SessionOccurrenceRepository occurrences) {
-        return MockMvcBuilders.standaloneSetup(new GroupController(
-                mock(CreateGroupUseCase.class),
+        return MockMvcBuilders.standaloneSetup(new GroupSessionController(
                 mock(CreateSessionUseCase.class),
                 mock(GetGroupSessionsUseCase.class),
-                new StartSessionUseCase(groupRepository, occurrences))).build();
+                new StartSessionUseCase(groupRepository, occurrences),
+                mock(CloseSessionUseCase.class))).build();
     }
 
     private static boolean hasCause(Throwable failure, Class<? extends Throwable> type) {
