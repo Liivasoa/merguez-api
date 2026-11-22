@@ -23,6 +23,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class CloseSessionTest {
@@ -201,7 +202,7 @@ class CloseSessionTest {
         assertEquals(Map.of(admin, 1, member, -1), scores);
         assertEquals(1, payments.size());
 
-        assertThrows(IllegalStateException.class, () -> group.closeSession(member, occurrence));
+        assertThrows(SessionClosureRejectedException.class, () -> group.closeSession(member, occurrence));
 
         assertTrue(occurrence.isClosed());
         assertFalse(activeOccurrence.isClosed());
@@ -241,7 +242,8 @@ class CloseSessionTest {
         assertSame(activeOccurrence, restored.activeOccurrences().getFirst());
         assertEquals(List.of(closedNewRound), restored.rounds(activeOccurrence));
 
-        assertThrows(IllegalStateException.class, () -> restored.closeSession(member, closedOccurrence));
+        assertThrows(SessionClosureRejectedException.class,
+                () -> restored.closeSession(member, closedOccurrence));
 
         assertTrue(closedOccurrence.isClosed());
         assertFalse(activeOccurrence.isClosed());
@@ -305,7 +307,7 @@ class CloseSessionTest {
         assertFalse(occurrence.isClosed());
         assertTrue(group.rounds(occurrence).isEmpty());
 
-        assertThrows(IllegalStateException.class, () -> group.closeSession(admin, occurrence));
+        assertThrows(SessionClosureRejectedException.class, () -> group.closeSession(admin, occurrence));
 
         assertTrue(occurrence.isStarted());
         assertFalse(occurrence.isClosed());
@@ -340,7 +342,7 @@ class CloseSessionTest {
         assertEquals(RoundStatus.IN_PROGRESS, ongoingRound.status());
         assertEquals(List.of(combat), ongoingRound.combats());
 
-        assertThrows(IllegalStateException.class, () -> group.closeSession(admin, occurrence));
+        assertThrows(SessionClosureRejectedException.class, () -> group.closeSession(admin, occurrence));
 
         assertTrue(occurrence.isStarted());
         assertFalse(occurrence.isClosed());

@@ -17,6 +17,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.DuplicateSessionScheduleException;
+import mg.msys.merguez_api.group.domain.exception.InvalidSessionScheduleException;
+import mg.msys.merguez_api.group.domain.exception.SessionAlreadyStartedDomainException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class CreateSessionTest {
@@ -75,7 +78,7 @@ class CreateSessionTest {
                 group.createSession(member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(18, 0));
         var firstOccurrence = group.startSession(member, firstSession);
 
-        assertThrows(IllegalStateException.class, () -> group.startSession(member, secondSession));
+        assertThrows(SessionAlreadyStartedDomainException.class, () -> group.startSession(member, secondSession));
 
         assertEquals(List.of(firstOccurrence), group.activeOccurrences());
     }
@@ -201,8 +204,8 @@ class CreateSessionTest {
         UserId member = new UserId(UUID.randomUUID());
         Group group = Group.create("Dojo du mardi", admin, List.of(member));
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        InvalidSessionScheduleException exception = assertThrows(
+                InvalidSessionScheduleException.class,
                 () -> group.createSession(member, "Evening training", null, LocalTime.of(14, 0)));
 
         assertNotNull(exception.getMessage());
@@ -216,8 +219,8 @@ class CreateSessionTest {
         UserId member = new UserId(UUID.randomUUID());
         Group group = Group.create("Dojo du mardi", admin, List.of(member));
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        InvalidSessionScheduleException exception = assertThrows(
+                InvalidSessionScheduleException.class,
                 () -> group.createSession(member, "Evening training", DayOfWeek.TUESDAY, null));
 
         assertNotNull(exception.getMessage());
@@ -233,7 +236,7 @@ class CreateSessionTest {
         group.createSession(member, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
         assertThrows(
-                RuntimeException.class,
+                DuplicateSessionScheduleException.class,
                 () -> group.createSession(
                         member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0)));
     }
@@ -248,7 +251,7 @@ class CreateSessionTest {
                 group.createSession(member, "Morning training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
         assertThrows(
-                IllegalStateException.class,
+                DuplicateSessionScheduleException.class,
                 () -> group.createSession(
                         member, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0)));
 

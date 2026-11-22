@@ -1,5 +1,7 @@
 package mg.msys.merguez_api.group.application.exception;
 
+import java.util.Objects;
+
 public final class RoundOperationRefusedException extends RuntimeException {
 
     public enum Reason {
@@ -9,15 +11,13 @@ public final class RoundOperationRefusedException extends RuntimeException {
 
     private final Reason reason;
 
-    public RoundOperationRefusedException(Reason reason, Throwable cause) {
-        super("Round operation refused", cause);
-        this.reason = reason;
+    public RoundOperationRefusedException(Reason reason) {
+        this(reason, null);
     }
 
-    /** @deprecated Specify the refusal reason at the application boundary. */
-    @Deprecated
-    public RoundOperationRefusedException(Throwable cause) {
-        this(cause instanceof IllegalStateException ? Reason.CONFLICT : Reason.INVALID_REQUEST, cause);
+    public RoundOperationRefusedException(Reason reason, Throwable cause) {
+        super("Round operation refused", cause);
+        this.reason = Objects.requireNonNull(reason);
     }
 
     public Reason reason() {

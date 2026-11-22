@@ -46,7 +46,7 @@ public final class CloseSessionService implements CloseSessionUseCase {
                 : null;
         if (occurrence != null && !occurrence.scheduleId().equals(command.scheduledSessionId())) {
             throw new SessionClosureRefusedException(
-                    new IllegalStateException("Requested session is not the active session"));
+                    new SessionClosureRejectedException("Requested session is not the active session"));
         }
         List<Round> rounds = occurrence == null ? List.of() : List.copyOf(group.rounds(occurrence));
         SessionClosureResult result;

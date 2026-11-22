@@ -11,7 +11,14 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
+import mg.msys.merguez_api.group.domain.exception.CombatParticipantsNotInGroupException;
+import mg.msys.merguez_api.group.domain.exception.DuplicateSessionScheduleException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
+import mg.msys.merguez_api.group.domain.exception.InvalidSessionOccurrenceException;
+import mg.msys.merguez_api.group.domain.exception.InvalidSessionScheduleException;
+import mg.msys.merguez_api.group.domain.exception.ScheduledSessionDoesNotBelongToGroupException;
+import mg.msys.merguez_api.group.domain.exception.SessionAlreadyStartedDomainException;
+import mg.msys.merguez_api.group.domain.exception.SessionOccurrenceNotInProgressException;
 import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
@@ -59,7 +66,7 @@ public final class Group {
         Group group = new Group(id, name, description, creator, participants);
         for (Session session : sessions) {
             if (!id.equals(session.groupId())) {
-                throw new IllegalArgumentException("Scheduled session must belong to this group");
+                throw new ScheduledSessionDoesNotBelongToGroupException();
             }
             group.validateSessionSchedule(session.day(), session.startTime());
             group.sessions.add(session);
@@ -78,10 +85,10 @@ public final class Group {
             List<Round> rounds) {
         Group group = restore(id, name, description, creator, participants, sessions);
         if (activeOccurrence == null || !id.equals(activeOccurrence.groupId())) {
-            throw new IllegalArgumentException("Active occurrence must belong to this group");
+            throw new InvalidSessionOccurrenceException("Active occurrence must belong to this group");
         }
         if (group.sessions.stream().noneMatch(session -> session.id().equals(activeOccurrence.scheduleId()))) {
-            throw new IllegalArgumentException("Active occurrence must reference a scheduled session");
+            throw new InvalidSessionOccurrenceException("Active occurrence must reference a scheduled session");
         }
         group.activeOccurrence = activeOccurrence.attachRounds(rounds);
         return group;
@@ -99,13 +106,13 @@ public final class Group {
 
     private void validateSessionSchedule(DayOfWeek day, LocalTime startTime) {
         if (day == null) {
-            throw new IllegalArgumentException("Session day is required");
+            throw new InvalidSessionScheduleException("Session day is required");
         }
         if (startTime == null) {
-            throw new IllegalArgumentException("Session start time is required");
+            throw new InvalidSessionScheduleException("Session start time is required");
         }
         if (sessions.stream().anyMatch(session -> session.day().equals(day) && session.startTime().equals(startTime))) {
-            throw new IllegalStateException("A session already exists at this day and start time");
+            throw new DuplicateSessionScheduleException();
         }
     }
 
@@ -121,10 +128,10 @@ public final class Group {
             throw new GroupAccessDeniedException("Only group members can start sessions");
         }
         if (scheduledSession == null || !sessions.contains(scheduledSession)) {
-            throw new IllegalArgumentException("Scheduled session must belong to this group");
+            throw new ScheduledSessionDoesNotBelongToGroupException();
         }
         if (activeOccurrence != null) {
-            throw new IllegalStateException("A session is already started in this group");
+            throw new SessionAlreadyStartedDomainException();
         }
         activeOccurrence = new SessionOccurrence(id, scheduledSession.id(), Instant.now()).attachRounds(List.of());
         return activeOccurrence;
@@ -190,7 +197,7 @@ public final class Group {
 
     private SessionOccurrence requireActiveOccurrence(SessionOccurrence occurrence) {
         if (!isActiveOccurrence(occurrence)) {
-            throw new IllegalStateException("Session occurrence must be in progress");
+            throw new SessionOccurrenceNotInProgressException();
         }
         return activeOccurrence;
     }
@@ -202,7 +209,7 @@ public final class Group {
 
     private void requireGroupParticipants(Combat combat) {
         if (!combat.participants().stream().allMatch(this::isMemberOrAdmin)) {
-            throw new IllegalArgumentException("Combat participants must belong to this group");
+            throw new CombatParticipantsNotInGroupException();
         }
     }
 

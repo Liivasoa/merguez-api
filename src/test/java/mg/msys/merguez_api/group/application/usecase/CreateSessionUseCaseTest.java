@@ -14,6 +14,9 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+
+import mg.msys.merguez_api.group.domain.exception.DuplicateSessionScheduleException;
+import mg.msys.merguez_api.group.domain.exception.InvalidSessionScheduleException;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -117,7 +120,7 @@ class CreateSessionServiceTest {
         CreateSessionCommand command =
                 new CreateSessionCommand(groupId, admin, "Evening training", day, startTime);
 
-        assertThrows(IllegalArgumentException.class, () -> useCase.execute(command));
+        assertThrows(InvalidSessionScheduleException.class, () -> useCase.execute(command));
 
         assertEquals(0, repository.savedSessionLists.size());
         assertEquals(List.of(), group.sessions());
@@ -141,7 +144,7 @@ class CreateSessionServiceTest {
         CreateSessionCommand duplicateCommand = new CreateSessionCommand(
                 firstGroup.id(), firstMember, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
 
-        assertThrows(IllegalStateException.class, () -> useCase.execute(duplicateCommand));
+        assertThrows(DuplicateSessionScheduleException.class, () -> useCase.execute(duplicateCommand));
 
         assertEquals(List.of(existingSession), firstGroup.sessions());
         assertEquals(0, repository.savedSessionLists.size());

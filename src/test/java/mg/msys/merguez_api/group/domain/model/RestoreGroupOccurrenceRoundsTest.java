@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class RestoreGroupOccurrenceRoundsTest {
@@ -60,7 +61,7 @@ class RestoreGroupOccurrenceRoundsTest {
 
         Combat reusingAssignedParticipant = new Combat(List.of(firstMember, thirdMember), Optional.empty());
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRoundException.class,
                 () -> restoredGroup.addCombat(firstMember, firstRound, reusingAssignedParticipant));
     }
 }

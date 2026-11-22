@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.RoundAlreadyInProgressException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddRoundNumberingTest {
@@ -66,7 +67,7 @@ class AddRoundNumberingTest {
         Combat combat = new Combat(List.of(admin, member), Optional.empty());
         Round firstRound = group.addRound(admin, occurrence, List.of(combat));
 
-        assertThrows(IllegalStateException.class, () -> group.addRound(member, occurrence, List.of(combat)));
+        assertThrows(RoundAlreadyInProgressException.class, () -> group.addRound(member, occurrence, List.of(combat)));
         assertEquals(RoundStatus.IN_PROGRESS, firstRound.status());
         assertEquals(List.of(firstRound), group.rounds(occurrence));
     }

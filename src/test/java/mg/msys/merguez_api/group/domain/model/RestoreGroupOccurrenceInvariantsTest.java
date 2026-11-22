@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidSessionOccurrenceException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class RestoreGroupOccurrenceInvariantsTest {
@@ -25,7 +26,7 @@ class RestoreGroupOccurrenceInvariantsTest {
         SessionOccurrence foreignOccurrence =
                 new SessionOccurrence(GroupId.random(), fixture.session().id(), Instant.now());
 
-        assertThrows(IllegalArgumentException.class, () -> fixture.restore(foreignOccurrence, List.of()));
+        assertThrows(InvalidSessionOccurrenceException.class, () -> fixture.restore(foreignOccurrence, List.of()));
     }
 
     @Test
@@ -35,7 +36,8 @@ class RestoreGroupOccurrenceInvariantsTest {
         SessionOccurrence unscheduledOccurrence =
                 new SessionOccurrence(fixture.groupId(), UUID.randomUUID(), Instant.now());
 
-        assertThrows(IllegalArgumentException.class, () -> fixture.restore(unscheduledOccurrence, List.of()));
+        assertThrows(InvalidSessionOccurrenceException.class,
+                () -> fixture.restore(unscheduledOccurrence, List.of()));
     }
 
     @Test
@@ -46,7 +48,7 @@ class RestoreGroupOccurrenceInvariantsTest {
                 new SessionOccurrence(fixture.groupId(), UUID.randomUUID(), Instant.now());
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidSessionOccurrenceException.class,
                 () -> fixture.restore(
                         fixture.occurrence(),
                         List.of(fixture.round(anotherOccurrence, 1))));
@@ -80,7 +82,7 @@ class RestoreGroupOccurrenceInvariantsTest {
         Fixture fixture = new Fixture();
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidSessionOccurrenceException.class,
                 () -> fixture.restore(
                         fixture.occurrence(),
                         List.of(fixture.round(fixture.occurrence(), 2))));
@@ -92,7 +94,7 @@ class RestoreGroupOccurrenceInvariantsTest {
         Fixture fixture = new Fixture();
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidSessionOccurrenceException.class,
                 () -> fixture.restore(
                         fixture.occurrence(),
                         List.of(
@@ -106,7 +108,7 @@ class RestoreGroupOccurrenceInvariantsTest {
         Fixture fixture = new Fixture();
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidSessionOccurrenceException.class,
                 () -> fixture.restore(
                         fixture.occurrence(),
                         List.of(

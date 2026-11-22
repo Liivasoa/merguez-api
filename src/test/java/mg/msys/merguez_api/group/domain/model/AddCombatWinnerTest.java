@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidCombatException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddCombatWinnerTest {
@@ -24,7 +25,7 @@ class AddCombatWinnerTest {
         UserId unrelatedMember = new UserId(UUID.randomUUID());
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidCombatException.class,
                 () -> new Combat(List.of(firstMember, secondMember), Optional.of(unrelatedMember)));
     }
 

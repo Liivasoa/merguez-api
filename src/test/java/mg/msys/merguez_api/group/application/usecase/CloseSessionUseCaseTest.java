@@ -48,6 +48,7 @@ import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurre
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.SaveClosedSessionOccurrencePort;
 import mg.msys.merguez_api.group.domain.model.Combat;
+import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.RoundStatus;
@@ -168,7 +169,7 @@ class CloseSessionServiceTest {
         SessionClosureRefusedException thrown = assertThrows(SessionClosureRefusedException.class,
                 () -> useCase.execute(new CloseSessionCommand(group.id(), admin, requestedSession.id())));
 
-        assertTrue(thrown.getCause() instanceof IllegalStateException);
+        assertTrue(thrown.getCause() instanceof SessionClosureRejectedException);
         assertEquals("Requested session is not the active session", thrown.getCause().getMessage());
         assertTrue(thrown.getCause().getMessage().toLowerCase(java.util.Locale.ROOT).contains("session"));
         assertTrue(thrown.getCause().getMessage().toLowerCase(java.util.Locale.ROOT).contains("active"));

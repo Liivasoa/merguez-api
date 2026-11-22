@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddCombatUniquenessTest {
@@ -30,7 +31,7 @@ class AddCombatUniquenessTest {
                 new Combat(List.of(firstMember, secondMember), Optional.empty()),
                 new Combat(List.of(firstMember, thirdMember), Optional.empty()));
 
-        assertThrows(IllegalArgumentException.class, () -> new Round(occurrence, 1, combats));
+        assertThrows(InvalidRoundException.class, () -> new Round(occurrence, 1, combats));
     }
 
     @Test
@@ -50,7 +51,7 @@ class AddCombatUniquenessTest {
         Combat combatWithAlreadyAssignedMember = new Combat(List.of(firstMember, thirdMember), Optional.empty());
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRoundException.class,
                 () -> group.addCombat(firstMember, round, combatWithAlreadyAssignedMember));
 
         assertEquals(List.of(initialCombat), round.combats());

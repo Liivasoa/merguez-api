@@ -31,6 +31,8 @@ import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurre
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
+import mg.msys.merguez_api.group.domain.exception.RoundAlreadyInProgressException;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
@@ -236,7 +238,7 @@ class StartSessionServiceTest {
 
         Group reloadedGroup = groupLoader.loadByGroupId(groupId).orElseThrow();
         assertAll(
-                () -> assertEquals(IllegalArgumentException.class, exception.getCause().getClass()),
+                () -> assertEquals(InvalidRoundException.class, exception.getCause().getClass()),
                 () -> assertEquals("A round must contain at least one combat", exception.getCause().getMessage()),
                 () -> assertEquals(0, roundRepository.savedRounds.size()),
                 () -> assertEquals(List.of(), reloadedGroup.rounds(reloadedGroup.activeOccurrences().getFirst())));
@@ -262,7 +264,7 @@ class StartSessionServiceTest {
         RoundOperationRefusedException refusal = assertThrowsExactly(
                 RoundOperationRefusedException.class, () -> useCase.execute(command));
 
-        assertTrue(refusal.getCause() instanceof IllegalStateException);
+        assertTrue(refusal.getCause() instanceof RoundAlreadyInProgressException);
         assertEquals(List.of(firstRound), rounds.savedRounds);
     }
 
@@ -315,12 +317,12 @@ class StartSessionServiceTest {
         AddRoundService useCase = new AddRoundService(id -> Optional.of(group), roundRepository);
         Combat combat = new Combat(List.of(admin, member), Optional.empty());
 
-        IllegalStateException exception = assertThrowsExactly(
-                IllegalStateException.class,
+        RoundOperationRefusedException exception = assertThrowsExactly(
+                RoundOperationRefusedException.class,
                 () -> useCase.execute(new AddRoundCommand(group.id(), member, List.of(combat))));
 
         assertAll(
-                () -> assertEquals("Loaded group has no active session occurrence", exception.getMessage()),
+                () -> assertEquals(RoundOperationRefusedException.Reason.CONFLICT, exception.reason()),
                 () -> assertEquals(0, roundRepository.savedRounds.size()));
     }
 

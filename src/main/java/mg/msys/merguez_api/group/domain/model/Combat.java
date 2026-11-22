@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidCombatException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 public record Combat(List<UserId> participants, Optional<UserId> winner) {
@@ -12,10 +13,10 @@ public record Combat(List<UserId> participants, Optional<UserId> winner) {
         participants = List.copyOf(Objects.requireNonNull(participants, "Combat participants are required"));
         winner = Objects.requireNonNull(winner, "Combat winner is required");
         if (participants.size() != 2 || participants.get(0).equals(participants.get(1))) {
-            throw new IllegalArgumentException("A combat must have exactly two distinct participants");
+            throw new InvalidCombatException("A combat must have exactly two distinct participants");
         }
         if (winner.isPresent() && !participants.contains(winner.get())) {
-            throw new IllegalArgumentException("Combat winner must be one of its participants");
+            throw new InvalidCombatException("Combat winner must be one of its participants");
         }
     }
 }

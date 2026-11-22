@@ -12,6 +12,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundResultsException;
+import mg.msys.merguez_api.group.domain.exception.RoundClosedException;
+import mg.msys.merguez_api.group.domain.exception.RoundDoesNotBelongToOccurrenceException;
+import mg.msys.merguez_api.group.domain.exception.RoundNotInProgressException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class CloseRoundTest {
@@ -35,9 +39,9 @@ class CloseRoundTest {
     @Test
     void rejectsIncorrectResultsWithoutChangingTheRound() {
         Fixture f = new Fixture();
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidRoundResultsException.class,
                 () -> f.group.closeRound(f.admin, f.round, List.of(f.round.combats().getFirst())));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidRoundResultsException.class,
                 () -> f.group.closeRound(f.admin, f.round, List.of(
                         new Combat(List.of(f.admin, f.second), Optional.empty()),
                         new Combat(List.of(f.first, f.third), Optional.empty()))));
@@ -50,9 +54,9 @@ class CloseRoundTest {
     void refusesFurtherChangesToClosedRounds() {
         Fixture f = new Fixture();
         Round closed = f.group.closeRound(f.admin, f.round, f.round.combats());
-        assertThrows(IllegalStateException.class,
+        assertThrows(RoundNotInProgressException.class,
                 () -> f.group.closeRound(f.admin, closed, closed.combats()));
-        assertThrows(IllegalStateException.class,
+        assertThrows(RoundClosedException.class,
                 () -> f.group.addCombat(f.admin, closed,
                         new Combat(List.of(f.admin, f.first), Optional.empty())));
     }
@@ -62,7 +66,7 @@ class CloseRoundTest {
         Fixture f = new Fixture();
         Round closed = f.group.closeRound(f.admin, f.round, f.round.combats());
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(RoundDoesNotBelongToOccurrenceException.class,
                 () -> f.group.closeRound(f.admin, f.round, f.round.combats()));
         assertEquals(List.of(closed), f.group.rounds(f.occurrence));
     }

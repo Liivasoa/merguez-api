@@ -7,6 +7,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundResultsException;
+import mg.msys.merguez_api.group.domain.exception.RoundClosedException;
+import mg.msys.merguez_api.group.domain.exception.RoundNotInProgressException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 public record Round(SessionOccurrence occurrence, int number, RoundStatus status, List<Combat> combats) {
@@ -15,16 +19,16 @@ public record Round(SessionOccurrence occurrence, int number, RoundStatus status
         occurrence = Objects.requireNonNull(occurrence, "Session occurrence is required");
         status = Objects.requireNonNull(status, "Round status is required");
         if (number < 1) {
-            throw new IllegalArgumentException("Round number must be positive");
+            throw new InvalidRoundException("Round number must be positive");
         }
         combats = List.copyOf(Objects.requireNonNull(combats, "Round combats are required"));
         if (combats.isEmpty()) {
-            throw new IllegalArgumentException("A round must contain at least one combat");
+            throw new InvalidRoundException("A round must contain at least one combat");
         }
         Set<UserId> assignedParticipants = new HashSet<>();
         for (Combat combat : combats) {
             if (combat.participants().stream().anyMatch(participant -> !assignedParticipants.add(participant))) {
-                throw new IllegalArgumentException("A participant can only appear in one combat per round");
+                throw new InvalidRoundException("A participant can only appear in one combat per round");
             }
         }
     }
@@ -39,7 +43,7 @@ public record Round(SessionOccurrence occurrence, int number, RoundStatus status
 
     Round addCombat(Combat combat, Consumer<Combat> requireGroupParticipants) {
         if (status == RoundStatus.CLOSED) {
-            throw new IllegalStateException("Round is closed");
+            throw new RoundClosedException();
         }
         requireGroupParticipants.accept(combat);
         List<Combat> updatedCombats = new ArrayList<>(combats);
@@ -49,10 +53,10 @@ public record Round(SessionOccurrence occurrence, int number, RoundStatus status
 
     Round close(List<Combat> results) {
         if (status != RoundStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Round must be in progress");
+            throw new RoundNotInProgressException();
         }
         if (results == null || results.size() != combats.size() || results.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("Results must match all round combats");
+            throw new InvalidRoundResultsException("Results must match all round combats");
         }
         List<Combat> updatedCombats = new ArrayList<>();
         for (Combat existing : combats) {
@@ -60,7 +64,7 @@ public record Round(SessionOccurrence occurrence, int number, RoundStatus status
                     .filter(result -> result.participants().containsAll(existing.participants()))
                     .toList();
             if (matches.size() != 1) {
-                throw new IllegalArgumentException("Results must match all round combats");
+                throw new InvalidRoundResultsException("Results must match all round combats");
             }
             updatedCombats.add(new Combat(existing.participants(), matches.getFirst().winner()));
         }

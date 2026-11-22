@@ -23,6 +23,7 @@ import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedExce
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
@@ -79,7 +80,7 @@ class AddCombatServiceTest {
         Group reloadedGroup = scenario.groupLoader().loadByGroupId(scenario.groupId()).orElseThrow();
         Round reloadedRound = reloadedGroup.rounds(reloadedGroup.activeOccurrences().getFirst()).getFirst();
         assertAll(
-                () -> assertEquals(IllegalArgumentException.class, exception.getCause().getClass()),
+                () -> assertEquals(InvalidRoundException.class, exception.getCause().getClass()),
                 () -> assertEquals(
                         "A participant can only appear in one combat per round", exception.getCause().getMessage()),
                 () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
@@ -103,8 +104,7 @@ class AddCombatServiceTest {
                         availableCombat)));
 
         assertAll(
-                () -> assertEquals(IllegalArgumentException.class, exception.getCause().getClass()),
-                () -> assertEquals("Round not found", exception.getCause().getMessage()),
+                () -> assertEquals(RoundOperationRefusedException.Reason.INVALID_REQUEST, exception.reason()),
                 () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
                 () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
     }
@@ -123,7 +123,7 @@ class AddCombatServiceTest {
                         scenario.groupId(), scenario.requester(), scenario.existingRound().number(), combat)));
 
         assertAll(
-                () -> assertEquals(IllegalStateException.class, exception.getCause().getClass()),
+                () -> assertEquals(RoundOperationRefusedException.Reason.CONFLICT, exception.reason()),
                 () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
                 () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
     }
@@ -142,12 +142,13 @@ class AddCombatServiceTest {
         Combat combat = new Combat(
                 List.of(scenario.thirdMember(), scenario.fourthMember()), Optional.empty());
 
-        assertThrowsExactly(
-                IllegalStateException.class,
+        RoundOperationRefusedException exception = assertThrowsExactly(
+                RoundOperationRefusedException.class,
                 () -> useCase.execute(new AddCombatCommand(
                         scenario.groupId(), scenario.requester(), scenario.existingRound().number(), combat)));
 
         assertAll(
+                () -> assertEquals(RoundOperationRefusedException.Reason.CONFLICT, exception.reason()),
                 () -> assertEquals(0, scenario.roundRepository().saveCalls().size()),
                 () -> assertEquals(List.of(scenario.existingRound()), scenario.roundRepository().persistedRounds()));
     }

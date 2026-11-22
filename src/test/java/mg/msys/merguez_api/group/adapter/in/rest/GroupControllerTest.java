@@ -60,6 +60,7 @@ import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
+import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
@@ -386,7 +387,8 @@ class GroupControllerTest {
         UUID requester = UUID.randomUUID();
         UUID member = UUID.randomUUID();
         when(CloseRoundService.execute(any(CloseRoundCommand.class)))
-                .thenThrow(new RoundOperationRefusedException(new IllegalStateException("private diagnostic")));
+                .thenThrow(new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.CONFLICT, new IllegalStateException("private diagnostic")));
 
         mockMvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", groupId)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -524,17 +526,16 @@ class GroupControllerTest {
     @MethodSource("roundRefusalCauses")
     @DisplayName("POST a refused round operation returns a safe ProblemDetail")
     void createRoundRefusedForInactiveOccurrenceDoesNotExposeExceptionDetails(
-            String exceptionType, int expectedStatus) throws Exception {
+            String reason, int expectedStatus) throws Exception {
         GroupId groupId = GroupId.random();
         UserId requester = new UserId(UUID.randomUUID());
         UserId firstMember = new UserId(UUID.randomUUID());
         UserId secondMember = new UserId(UUID.randomUUID());
         String sensitiveDetail = "private inactive occurrence diagnostic";
-        RuntimeException cause = exceptionType.equals("IllegalStateException")
-                ? new IllegalStateException(sensitiveDetail)
-                : new IllegalArgumentException(sensitiveDetail);
+        RuntimeException cause = new RuntimeException(sensitiveDetail);
         when(AddRoundService.execute(any(AddRoundCommand.class)))
-                .thenThrow(new RoundOperationRefusedException(cause));
+                .thenThrow(new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.valueOf(reason), cause));
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -567,18 +568,17 @@ class GroupControllerTest {
     @MethodSource("roundRefusalCauses")
     @DisplayName("POST an additional combat refused by the application returns a safe ProblemDetail")
     void addCombatRefusedForInvalidCompositionDoesNotExposeExceptionDetails(
-            String exceptionType, int expectedStatus) throws Exception {
+            String reason, int expectedStatus) throws Exception {
         GroupId groupId = GroupId.random();
         int roundNumber = 2;
         UserId requester = new UserId(UUID.randomUUID());
         UserId firstMember = new UserId(UUID.randomUUID());
         UserId secondMember = new UserId(UUID.randomUUID());
         String sensitiveDetail = "private invalid combat diagnostic";
-        RuntimeException cause = exceptionType.equals("IllegalStateException")
-                ? new IllegalStateException(sensitiveDetail)
-                : new IllegalArgumentException(sensitiveDetail);
+        RuntimeException cause = new RuntimeException(sensitiveDetail);
         when(AddCombatService.execute(any(AddCombatCommand.class)))
-                .thenThrow(new RoundOperationRefusedException(cause));
+                .thenThrow(new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.valueOf(reason), cause));
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -609,8 +609,8 @@ class GroupControllerTest {
 
     static Stream<Arguments> roundRefusalCauses() {
         return Stream.of(
-                Arguments.of("IllegalStateException", 409),
-                Arguments.of("IllegalArgumentException", 400));
+                Arguments.of("CONFLICT", 409),
+                Arguments.of("INVALID_REQUEST", 400));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -934,7 +934,7 @@ class GroupControllerTest {
                 new StartSessionCommand(activeGroupId, activeGroupRequester, refusedScheduleId);
         StartSessionCommand allowedCommand =
                 new StartSessionCommand(otherGroupId, otherGroupRequester, allowedScheduleId);
-        when(StartSessionService.execute(refusedCommand)).thenThrow(new IllegalStateException(sensitiveDetail));
+        when(StartSessionService.execute(refusedCommand)).thenThrow(new SessionAlreadyStartedException());
         when(StartSessionService.execute(allowedCommand))
                 .thenReturn(new SessionOccurrence(otherGroupId, allowedScheduleId, startedAt));
 

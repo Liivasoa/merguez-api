@@ -14,6 +14,7 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Repository;
 
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
+import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 
@@ -49,7 +50,7 @@ class MongoSessionOccurrenceRepository implements SessionOccurrenceRepository {
             repository.save(SessionOccurrenceDocument.from(occurrence));
         } catch (DuplicateKeyException exception) {
             if (isActiveIndexDuplicate(exception)) {
-                throw new IllegalStateException("A session is already started in this group", exception);
+                throw new SessionAlreadyStartedException(exception);
             }
             throw exception;
         }

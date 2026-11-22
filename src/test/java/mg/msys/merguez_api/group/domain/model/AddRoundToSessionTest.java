@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.SessionOccurrenceNotInProgressException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddRoundToSessionTest {
@@ -81,7 +82,7 @@ class AddRoundToSessionTest {
 
         assertTrue(group.activeOccurrences().isEmpty());
         assertThrows(
-                IllegalStateException.class,
+                SessionOccurrenceNotInProgressException.class,
                 () -> group.addRound(admin, unstartedOccurrence, validCombats));
         assertTrue(group.activeOccurrences().isEmpty());
     }

@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidCombatException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddCombatParticipantCountTest {
@@ -19,7 +20,7 @@ class AddCombatParticipantCountTest {
         UserId participant = new UserId(UUID.randomUUID());
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidCombatException.class,
                 () -> new Combat(List.of(participant), Optional.empty()));
     }
 
@@ -31,7 +32,7 @@ class AddCombatParticipantCountTest {
         UserId thirdParticipant = new UserId(UUID.randomUUID());
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidCombatException.class,
                 () -> new Combat(
                         List.of(firstParticipant, secondParticipant, thirdParticipant), Optional.empty()));
     }

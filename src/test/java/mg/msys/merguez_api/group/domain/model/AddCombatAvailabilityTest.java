@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddCombatAvailabilityTest {
@@ -34,7 +35,7 @@ class AddCombatAvailabilityTest {
         Combat combatWithOneAvailable = new Combat(List.of(admin, firstMember), Optional.empty());
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRoundException.class,
                 () -> groupWithOneAvailable.addCombat(admin, smallRound, combatWithOneAvailable));
         assertEquals(List.of(initialCombat), smallRound.combats());
 
@@ -49,7 +50,7 @@ class AddCombatAvailabilityTest {
         Combat combatWithNoneAvailable = new Combat(List.of(firstMember, thirdMember), Optional.empty());
 
         assertThrows(
-                IllegalArgumentException.class,
+                InvalidRoundException.class,
                 () -> groupWithNoneAvailable.addCombat(admin, fullRound, combatWithNoneAvailable));
         assertEquals(List.of(initialCombat, additionalCombat), fullRound.combats());
     }

@@ -7,6 +7,8 @@ import mg.msys.merguez_api.group.application.command.CloseRoundCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
+import mg.msys.merguez_api.group.domain.exception.DomainConflictException;
+import mg.msys.merguez_api.group.domain.exception.DomainValidationException;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
@@ -24,27 +26,24 @@ public final class CloseRoundService implements CloseRoundUseCase {
     public Round execute(CloseRoundCommand command) {
         Group group = groupLoader.loadByGroupId(command.groupId())
                 .orElseThrow(() -> new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.CONFLICT,
-                        new IllegalStateException("Group or active session occurrence not found")));
+                        RoundOperationRefusedException.Reason.CONFLICT));
         SessionOccurrence occurrence = group.activeOccurrences().stream().findFirst()
                 .orElseThrow(() -> new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.CONFLICT,
-                        new IllegalStateException("Loaded group has no active session occurrence")));
+                        RoundOperationRefusedException.Reason.CONFLICT));
         Round round = group.rounds(occurrence).stream()
                 .filter(candidate -> candidate.number() == command.roundNumber())
                 .findFirst()
                 .orElseThrow(() -> new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.INVALID_REQUEST,
-                        new IllegalArgumentException("Round not found")));
+                        RoundOperationRefusedException.Reason.INVALID_REQUEST));
         Round closed;
         try {
             closed = group.closeRound(command.requester(), round, command.combats());
-        } catch (IllegalArgumentException | IllegalStateException exception) {
+        } catch (DomainConflictException exception) {
             throw new RoundOperationRefusedException(
-                    exception instanceof IllegalStateException
-                            ? RoundOperationRefusedException.Reason.CONFLICT
-                            : RoundOperationRefusedException.Reason.INVALID_REQUEST,
-                    exception);
+                    RoundOperationRefusedException.Reason.CONFLICT, exception);
+        } catch (DomainValidationException exception) {
+            throw new RoundOperationRefusedException(
+                    RoundOperationRefusedException.Reason.INVALID_REQUEST, exception);
         }
         roundRepository.replace(round, closed);
         return closed;

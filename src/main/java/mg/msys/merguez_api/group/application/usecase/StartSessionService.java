@@ -9,6 +9,7 @@ import mg.msys.merguez_api.group.application.exception.ScheduledSessionNotFoundE
 import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
+import mg.msys.merguez_api.group.domain.exception.SessionAlreadyStartedDomainException;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 
@@ -39,7 +40,7 @@ public final class StartSessionService implements StartSessionUseCase {
         try {
             occurrence = group.startSession(command.requester(), scheduledSession);
             occurrenceRepository.save(occurrence);
-        } catch (IllegalStateException exception) {
+        } catch (SessionAlreadyStartedDomainException exception) {
             throw new SessionAlreadyStartedException(exception);
         }
         return occurrence;

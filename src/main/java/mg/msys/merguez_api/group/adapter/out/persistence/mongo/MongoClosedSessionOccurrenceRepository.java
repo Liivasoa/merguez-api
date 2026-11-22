@@ -29,7 +29,7 @@ class MongoClosedSessionOccurrenceRepository implements SaveClosedSessionOccurre
             throw new IllegalArgumentException("Session occurrence must be closed");
         }
         if (rounds.isEmpty() || rounds.stream().anyMatch(round -> !round.occurrence().equals(occurrence))) {
-            throw new IllegalStateException("Session closure conflicts with the loaded rounds");
+            throw new SessionClosureConflictException("Session closure conflicts with the loaded rounds");
         }
         Document filter = MongoSessionOccurrenceFilters.occurrenceFilter(occurrence);
         List<Object> roundChecks = new ArrayList<>();

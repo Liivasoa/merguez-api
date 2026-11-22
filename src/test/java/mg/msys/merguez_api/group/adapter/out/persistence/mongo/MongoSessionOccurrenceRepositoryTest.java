@@ -39,6 +39,10 @@ import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import mg.msys.merguez_api.group.domain.exception.RoundAlreadyInProgressException;
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
+import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -60,6 +64,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
 
 import mg.msys.merguez_api.group.adapter.in.rest.GroupRoundController;
+import mg.msys.merguez_api.group.adapter.in.rest.GroupExceptionHandler;
 import mg.msys.merguez_api.group.adapter.in.rest.GroupSessionController;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
@@ -200,7 +205,7 @@ class MongoSessionOccurrenceRepositoryTest {
                 .get("1", Document.class).getString("status"));
         assertEquals(List.of(occurrence), restored.activeOccurrences());
         assertEquals(List.of(initial), restored.rounds(occurrence));
-        assertThrows(IllegalStateException.class, () -> restored.addRound(admin, occurrence, List.of(
+        assertThrows(RoundAlreadyInProgressException.class, () -> restored.addRound(admin, occurrence, List.of(
                 new Combat(List.of(first, second), Optional.empty()))));
 
         Round replacement = new Round(occurrence, 1, List.of(
@@ -426,7 +431,8 @@ class MongoSessionOccurrenceRepositoryTest {
                 : List.of(new Round(other, 1, RoundStatus.CLOSED,
                         List.of(new Combat(List.of(admin, member), Optional.of(admin)))));
 
-        assertThrowsExactly(IllegalStateException.class, () -> closedOccurrenceSaver.save(closed, invalidSnapshot));
+        assertThrowsExactly(SessionClosureConflictException.class,
+                () -> closedOccurrenceSaver.save(closed, invalidSnapshot));
     }
 
     private void assertClosureRefusesScalarReplacedWithArray(boolean winner) {
@@ -739,7 +745,8 @@ class MongoSessionOccurrenceRepositoryTest {
         assertEquals(List.of(firstRound, secondRound), restored.rounds(occurrence));
 
         Combat conflictingCombat = new Combat(List.of(first, third), Optional.empty());
-        assertThrows(IllegalArgumentException.class, () -> restored.addCombat(admin, secondRound, conflictingCombat));
+        assertThrows(InvalidRoundException.class,
+                () -> restored.addCombat(admin, secondRound, conflictingCombat));
         assertEquals(List.of(firstRound, secondRound), restored.rounds(occurrence));
 
         Combat availableCombat = new Combat(List.of(third, fourth), Optional.empty());
@@ -903,7 +910,7 @@ class MongoSessionOccurrenceRepositoryTest {
         GroupId groupId = GroupId.random();
         occurrenceRepository.save(new SessionOccurrence(groupId, UUID.randomUUID(), Instant.now()));
 
-        IllegalStateException conflict = assertThrows(IllegalStateException.class, () ->
+        SessionAlreadyStartedException conflict = assertThrows(SessionAlreadyStartedException.class, () ->
                 occurrenceRepository.save(new SessionOccurrence(groupId, UUID.randomUUID(), Instant.now())));
 
         assertTrue(hasCause(conflict, DuplicateKeyException.class), "The Mongo duplicate key must remain available");
@@ -996,7 +1003,9 @@ class MongoSessionOccurrenceRepositoryTest {
                 mock(CreateSessionService.class),
                 mock(GetGroupSessionsService.class),
                 new StartSessionService(groupRepository, occurrences),
-                mock(CloseSessionService.class))).build();
+                mock(CloseSessionService.class)))
+                .setControllerAdvice(new GroupExceptionHandler())
+                .build();
     }
 
     private static boolean hasCause(Throwable failure, Class<? extends Throwable> type) {
@@ -1022,7 +1031,7 @@ class MongoSessionOccurrenceRepositoryTest {
                         try {
                             occurrenceRepository.save(occurrence);
                             return true;
-                        } catch (IllegalStateException exception) {
+                        } catch (SessionAlreadyStartedException exception) {
                             assertTrue(hasCause(exception, DuplicateKeyException.class),
                                     "Only Mongo active-index conflicts may be rejected");
                             return false;

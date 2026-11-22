@@ -8,6 +8,10 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
+import mg.msys.merguez_api.group.domain.exception.InvalidSessionOccurrenceException;
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
+import mg.msys.merguez_api.group.domain.exception.RoundAlreadyInProgressException;
+import mg.msys.merguez_api.group.domain.exception.RoundDoesNotBelongToOccurrenceException;
 import mg.msys.merguez_api.group.domain.service.SessionSettlementCalculator;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
@@ -50,10 +54,10 @@ public final class SessionOccurrence {
         for (int index = 0; index < restoredRounds.size(); index++) {
             Round round = restoredRounds.get(index);
             if (round == null || !equals(round.occurrence())) {
-                throw new IllegalArgumentException("Restored rounds must belong to the active occurrence");
+                throw new InvalidSessionOccurrenceException("Restored rounds must belong to the active occurrence");
             }
             if (round.number() != index + 1) {
-                throw new IllegalArgumentException("Restored rounds must be numbered consecutively from one");
+                throw new InvalidSessionOccurrenceException("Restored rounds must be numbered consecutively from one");
             }
         }
         SessionOccurrence occurrence = this;
@@ -77,10 +81,10 @@ public final class SessionOccurrence {
 
     Round addRound(List<Combat> combats, Consumer<Combat> requireGroupParticipants) {
         if (rounds.stream().anyMatch(round -> round.status() == RoundStatus.IN_PROGRESS)) {
-            throw new IllegalStateException("A round is already in progress in this group");
+            throw new RoundAlreadyInProgressException();
         }
         if (combats == null || combats.isEmpty()) {
-            throw new IllegalArgumentException("A round must contain at least one combat");
+            throw new InvalidRoundException("A round must contain at least one combat");
         }
         combats.forEach(requireGroupParticipants);
         Round round = new Round(this, rounds.size() + 1, combats);
@@ -105,7 +109,7 @@ public final class SessionOccurrence {
     private int requireRoundIndex(Round expected) {
         int index = rounds.indexOf(expected);
         if (index < 0) {
-            throw new IllegalArgumentException("Round must belong to this group");
+            throw new RoundDoesNotBelongToOccurrenceException();
         }
         return index;
     }

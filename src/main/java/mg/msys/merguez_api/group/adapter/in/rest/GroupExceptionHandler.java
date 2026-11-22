@@ -13,14 +13,15 @@ import mg.msys.merguez_api.group.application.exception.ScheduledSessionNotFoundE
 import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
-import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
+import mg.msys.merguez_api.group.domain.exception.DuplicateSessionScheduleException;
+import mg.msys.merguez_api.group.domain.exception.DomainValidationException;
 
 @RestControllerAdvice(assignableTypes = {
         GroupController.class,
         GroupSessionController.class,
         GroupRoundController.class
 })
-class GroupExceptionHandler {
+public class GroupExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GroupExceptionHandler.class);
 
@@ -44,9 +45,15 @@ class GroupExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "Access denied.");
     }
 
-    @ExceptionHandler(InvalidGroupException.class)
-    ProblemDetail handleInvalidGroup(InvalidGroupException ex) {
+    @ExceptionHandler(DomainValidationException.class)
+    ProblemDetail handleDomainValidation(DomainValidationException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(DuplicateSessionScheduleException.class)
+    ProblemDetail handleDuplicateSessionSchedule() {
+        return ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, "A session already exists at this day and start time.");
     }
 
     @ExceptionHandler(RoundOperationRefusedException.class)

@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.DuplicateSessionScheduleException;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupMember;
 import mg.msys.merguez_api.group.domain.model.Role;
@@ -83,7 +84,7 @@ class GroupDocumentTest {
 
         assertNotEquals(restoredFirstGroup.id(), restoredSecondGroup.id());
         assertThrows(
-                IllegalStateException.class,
+                DuplicateSessionScheduleException.class,
                 () -> restoredFirstGroup.createSession(
                         creator, "Duplicate Tuesday dojo practice", DayOfWeek.TUESDAY, LocalTime.of(14, 0)));
 

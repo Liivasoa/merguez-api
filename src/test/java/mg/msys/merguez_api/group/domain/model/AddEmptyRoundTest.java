@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.domain.exception.InvalidRoundException;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class AddEmptyRoundTest {
@@ -27,7 +28,7 @@ class AddEmptyRoundTest {
                 firstMember, "Evening training", DayOfWeek.TUESDAY, LocalTime.of(14, 0));
         SessionOccurrence occurrence = group.startSession(firstMember, session);
 
-        assertThrows(IllegalArgumentException.class, () -> group.addRound(firstMember, occurrence, List.of()));
+        assertThrows(InvalidRoundException.class, () -> group.addRound(firstMember, occurrence, List.of()));
 
         Round firstValidRound = group.addRound(
                 firstMember,
