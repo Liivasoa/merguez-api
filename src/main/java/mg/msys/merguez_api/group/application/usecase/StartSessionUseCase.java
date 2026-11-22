@@ -4,6 +4,8 @@ import java.util.Objects;
 
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
+import mg.msys.merguez_api.group.application.exception.ScheduledSessionNotFoundException;
+import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.SessionOccurrenceRepository;
 import mg.msys.merguez_api.group.domain.model.Group;
@@ -27,13 +29,17 @@ public final class StartSessionUseCase {
         var scheduledSession = group.sessions().stream()
                 .filter(session -> session.id().equals(command.scheduledSessionId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Scheduled session not found in group: " + command.scheduledSessionId()));
+                .orElseThrow(() -> new ScheduledSessionNotFoundException(command.scheduledSessionId()));
         if (occurrenceRepository.existsStartedByGroupId(group.id())) {
-            throw new IllegalStateException("A session is already started in this group");
+            throw new SessionAlreadyStartedException();
         }
-        SessionOccurrence occurrence = group.startSession(command.requester(), scheduledSession);
-        occurrenceRepository.save(occurrence);
+        SessionOccurrence occurrence;
+        try {
+            occurrence = group.startSession(command.requester(), scheduledSession);
+            occurrenceRepository.save(occurrence);
+        } catch (IllegalStateException exception) {
+            throw new SessionAlreadyStartedException(exception);
+        }
         return occurrence;
     }
 }

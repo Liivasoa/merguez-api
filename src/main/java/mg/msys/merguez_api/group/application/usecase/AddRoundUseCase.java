@@ -23,14 +23,21 @@ public final class AddRoundUseCase {
     public Round execute(AddRoundCommand command) {
         Group group = groupLoader.loadByGroupId(command.groupId())
                 .orElseThrow(() -> new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.CONFLICT,
                         new IllegalStateException("Group or active session occurrence not found")));
         SessionOccurrence occurrence = group.activeOccurrences().stream().findFirst()
-                .orElseThrow(() -> new IllegalStateException("Loaded group has no active session occurrence"));
+                .orElseThrow(() -> new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.CONFLICT,
+                        new IllegalStateException("Loaded group has no active session occurrence")));
         Round round;
         try {
             round = group.addRound(command.requester(), occurrence, command.combats());
         } catch (IllegalArgumentException | IllegalStateException exception) {
-            throw new RoundOperationRefusedException(exception);
+            throw new RoundOperationRefusedException(
+                    exception instanceof IllegalStateException
+                            ? RoundOperationRefusedException.Reason.CONFLICT
+                            : RoundOperationRefusedException.Reason.INVALID_REQUEST,
+                    exception);
         }
         roundRepository.create(round);
         return round;

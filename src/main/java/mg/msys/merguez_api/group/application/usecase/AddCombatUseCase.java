@@ -23,19 +23,28 @@ public final class AddCombatUseCase {
     public Round execute(AddCombatCommand command) {
         Group group = groupLoader.loadByGroupId(command.groupId())
                 .orElseThrow(() -> new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.CONFLICT,
                         new IllegalStateException("Group or active session occurrence not found")));
         SessionOccurrence occurrence = group.activeOccurrences().stream()
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Group or active session occurrence not found"));
+                .orElseThrow(() -> new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.CONFLICT,
+                        new IllegalStateException("Group or active session occurrence not found")));
         Round round = group.rounds(occurrence).stream()
                 .filter(candidate -> candidate.number() == command.roundNumber())
                 .findFirst()
-                .orElseThrow(() -> new RoundOperationRefusedException(new IllegalArgumentException("Round not found")));
+                .orElseThrow(() -> new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.INVALID_REQUEST,
+                        new IllegalArgumentException("Round not found")));
         Round updatedRound;
         try {
             updatedRound = group.addCombat(command.requester(), round, command.combat());
         } catch (IllegalArgumentException | IllegalStateException exception) {
-            throw new RoundOperationRefusedException(exception);
+            throw new RoundOperationRefusedException(
+                    exception instanceof IllegalStateException
+                            ? RoundOperationRefusedException.Reason.CONFLICT
+                            : RoundOperationRefusedException.Reason.INVALID_REQUEST,
+                    exception);
         }
         roundRepository.replace(round, updatedRound);
         return updatedRound;

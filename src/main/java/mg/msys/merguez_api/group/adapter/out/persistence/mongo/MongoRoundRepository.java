@@ -55,6 +55,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
                 filter, roundUpdate(path, updated));
         if (result.getMatchedCount() == 0) {
             throw new RoundOperationRefusedException(
+                    RoundOperationRefusedException.Reason.CONFLICT,
                     new IllegalStateException("Round was changed or the active session is no longer available"));
         }
     }
@@ -73,6 +74,7 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
                 filter, roundUpdate("rounds." + round.number(), round));
         if (result.getMatchedCount() == 0) {
             throw new RoundOperationRefusedException(
+                    RoundOperationRefusedException.Reason.CONFLICT,
                     new IllegalStateException("Round creation conflicts with the active session state"));
         }
     }

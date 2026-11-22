@@ -22,18 +22,27 @@ public final class CloseRoundUseCase {
     public Round execute(CloseRoundCommand command) {
         Group group = groupLoader.loadByGroupId(command.groupId())
                 .orElseThrow(() -> new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.CONFLICT,
                         new IllegalStateException("Group or active session occurrence not found")));
         SessionOccurrence occurrence = group.activeOccurrences().stream().findFirst()
-                .orElseThrow(() -> new IllegalStateException("Loaded group has no active session occurrence"));
+                .orElseThrow(() -> new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.CONFLICT,
+                        new IllegalStateException("Loaded group has no active session occurrence")));
         Round round = group.rounds(occurrence).stream()
                 .filter(candidate -> candidate.number() == command.roundNumber())
                 .findFirst()
-                .orElseThrow(() -> new RoundOperationRefusedException(new IllegalArgumentException("Round not found")));
+                .orElseThrow(() -> new RoundOperationRefusedException(
+                        RoundOperationRefusedException.Reason.INVALID_REQUEST,
+                        new IllegalArgumentException("Round not found")));
         Round closed;
         try {
             closed = group.closeRound(command.requester(), round, command.combats());
         } catch (IllegalArgumentException | IllegalStateException exception) {
-            throw new RoundOperationRefusedException(exception);
+            throw new RoundOperationRefusedException(
+                    exception instanceof IllegalStateException
+                            ? RoundOperationRefusedException.Reason.CONFLICT
+                            : RoundOperationRefusedException.Reason.INVALID_REQUEST,
+                    exception);
         }
         roundRepository.replace(round, closed);
         return closed;

@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
+import mg.msys.merguez_api.group.application.exception.ScheduledSessionNotFoundException;
+import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
@@ -27,6 +29,16 @@ class GroupExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Group not found.");
     }
 
+    @ExceptionHandler(ScheduledSessionNotFoundException.class)
+    ProblemDetail handleScheduledSessionNotFound() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Scheduled session not found in group.");
+    }
+
+    @ExceptionHandler(SessionAlreadyStartedException.class)
+    ProblemDetail handleSessionAlreadyStarted() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "A session is already started in this group.");
+    }
+
     @ExceptionHandler(GroupAccessDeniedException.class)
     ProblemDetail handleGroupAccessDenied() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "Access denied.");
@@ -39,7 +51,7 @@ class GroupExceptionHandler {
 
     @ExceptionHandler(RoundOperationRefusedException.class)
     ProblemDetail handleRoundOperationRefused(RoundOperationRefusedException ex) {
-        HttpStatus status = ex.getCause() instanceof IllegalStateException
+        HttpStatus status = ex.reason() == RoundOperationRefusedException.Reason.CONFLICT
                 ? HttpStatus.CONFLICT
                 : HttpStatus.BAD_REQUEST;
         log.debug("Round request refused", ex);
