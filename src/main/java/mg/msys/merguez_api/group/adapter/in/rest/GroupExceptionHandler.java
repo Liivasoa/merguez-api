@@ -68,6 +68,6 @@ public class GroupExceptionHandler {
     @ExceptionHandler(SessionClosureRefusedException.class)
     ProblemDetail handleSessionClosureRefused(SessionClosureRefusedException ex) {
         log.debug("Session closure refused", ex);
-        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The session closure request was refused.");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.detail());
     }
 }

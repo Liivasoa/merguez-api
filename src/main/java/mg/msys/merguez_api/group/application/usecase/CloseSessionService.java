@@ -46,6 +46,7 @@ public final class CloseSessionService implements CloseSessionUseCase {
                 : null;
         if (occurrence != null && !occurrence.scheduleId().equals(command.scheduledSessionId())) {
             throw new SessionClosureRefusedException(
+                    "Requested session is not the active session",
                     new SessionClosureRejectedException("Requested session is not the active session"));
         }
         List<Round> rounds = occurrence == null ? List.of() : List.copyOf(group.rounds(occurrence));
@@ -53,12 +54,12 @@ public final class CloseSessionService implements CloseSessionUseCase {
         try {
             result = group.closeSession(command.requester(), occurrence);
         } catch (SessionClosureRejectedException ex) {
-            throw new SessionClosureRefusedException(ex);
+            throw new SessionClosureRefusedException(ex.getMessage(), ex);
         }
         try {
             occurrenceSaver.save(result.occurrence(), rounds);
         } catch (SessionClosureConflictException ex) {
-            throw new SessionClosureRefusedException(ex);
+            throw new SessionClosureRefusedException("The session changed before it could be closed.", ex);
         }
         result.netScores().keySet().forEach(member -> closureLogger.log(member, result));
         return result;

@@ -238,7 +238,7 @@ class GroupControllerTest {
         CloseSessionCommand command = new CloseSessionCommand(groupId, requester, sessionId);
         when(CloseSessionService.execute(command))
                 .thenThrow(new SessionClosureRefusedException(
-                        new IllegalStateException(domainMessage + ": " + sensitiveDetail)));
+                        domainMessage, new IllegalStateException(domainMessage + ": " + sensitiveDetail)));
 
         mockMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
                         groupId.value(), sessionId)
@@ -247,8 +247,7 @@ class GroupControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.detail").value("The session closure request was refused."))
-                .andExpect(content().string(not(containsString(domainMessage))))
+                .andExpect(jsonPath("$.detail").value(domainMessage))
                 .andExpect(content().string(not(containsString(sensitiveDetail))));
 
         verify(CloseSessionService).execute(command);
@@ -264,7 +263,7 @@ class GroupControllerTest {
 
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {"inactive", "no rounds", "open round", "different session"})
-    void realCloseSessionRefusalsReturnGenericConflictWithoutSavingOrLogging(String refusal) throws Exception {
+    void realCloseSessionRefusalsReturnExplicitConflictWithoutSavingOrLogging(String refusal) throws Exception {
         UserId admin = new UserId(UUID.randomUUID());
         UserId member = new UserId(UUID.randomUUID());
         Group group = Group.create("Training", admin, List.of(member));
@@ -309,8 +308,7 @@ class GroupControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.detail").value("The session closure request was refused."))
-                .andExpect(content().string(not(containsString(domainMessage))));
+                .andExpect(jsonPath("$.detail").value(domainMessage));
 
         verifyNoInteractions(saver, logger);
     }

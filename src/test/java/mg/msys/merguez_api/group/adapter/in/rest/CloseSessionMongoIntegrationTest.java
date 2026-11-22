@@ -162,9 +162,8 @@ class CloseSessionMongoIntegrationTest {
                                 .andExpect(status().isConflict())
                                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                                 .andExpect(jsonPath("$.status").value(409))
-                                .andExpect(jsonPath("$.detail").value("The session closure request was refused."))
-                                .andExpect(content().string(not(containsString(
-                                        "Session closure conflicts with changed rounds or active occurrence"))));
+                                .andExpect(jsonPath("$.detail").value(
+                                        "The session changed before it could be closed."));
                     } catch (ServletException failure) {
                         throw new AssertionError("Expected HTTP 409, but the save exception propagated", failure);
                     }
@@ -209,9 +208,8 @@ class CloseSessionMongoIntegrationTest {
                         .andExpect(status().isConflict())
                         .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                         .andExpect(jsonPath("$.status").value(409))
-                        .andExpect(jsonPath("$.detail").value("The session closure request was refused."))
-                        .andExpect(content().string(not(containsString(
-                                "All rounds must be closed before closing the session")))),
+                        .andExpect(jsonPath("$.detail").value(
+                                "All rounds must be closed before closing the session")),
                 () -> assertEquals(groupBefore, groupCollection.find(groupFilter).first()),
                 () -> assertEquals(occurrenceBefore, occurrenceCollection.find(occurrenceFilter).first()),
                 () -> verifyNoInteractions(closedOccurrenceSaver),
