@@ -86,7 +86,7 @@ import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
 import mg.msys.merguez_api.group.domain.model.SessionPayment;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
-@WebMvcTest(GroupController.class)
+@WebMvcTest({GroupController.class, GroupSessionController.class, GroupRoundController.class})
 class GroupControllerTest {
 
     @Autowired
@@ -141,9 +141,8 @@ class GroupControllerTest {
             default -> throw new AssertionError(failingPort);
         }
         CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
-        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupController(
-                createGroupUseCase, createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase,
-                addRoundUseCase, addCombatUseCase, closeRoundUseCase, realUseCase))
+        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupSessionController(
+                createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase, realUseCase))
                 .setControllerAdvice(new GroupExceptionHandler()).build();
 
         ServletException thrown = assertThrows(ServletException.class,
@@ -290,9 +289,8 @@ class GroupControllerTest {
             };
         }
         CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
-        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupController(
-                createGroupUseCase, createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase,
-                addRoundUseCase, addCombatUseCase, closeRoundUseCase, realUseCase))
+        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupSessionController(
+                createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase, realUseCase))
                 .setControllerAdvice(new GroupExceptionHandler()).build();
 
         standaloneMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
@@ -327,9 +325,8 @@ class GroupControllerTest {
             when(groups.findById(group.id())).thenReturn(Optional.empty());
         }
         CloseSessionUseCase realUseCase = new CloseSessionUseCase(loader, groups, saver, logger);
-        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupController(
-                createGroupUseCase, createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase,
-                addRoundUseCase, addCombatUseCase, closeRoundUseCase, realUseCase))
+        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupSessionController(
+                createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase, realUseCase))
                 .setControllerAdvice(new GroupExceptionHandler()).build();
 
         standaloneMvc.perform(post("/api/v1/groups/{groupId}/sessions/{sessionId}/close",
@@ -966,10 +963,11 @@ class GroupControllerTest {
         GroupId groupId = GroupId.random();
         GroupRepository repository = mock(GroupRepository.class);
         when(repository.findById(groupId)).thenReturn(Optional.empty());
-        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupController(
-                createGroupUseCase,
+        MockMvc standaloneMvc = MockMvcBuilders.standaloneSetup(new GroupSessionController(
                 new CreateSessionUseCase(repository),
-                new GetGroupSessionsUseCase(repository)))
+                new GetGroupSessionsUseCase(repository),
+                startSessionUseCase,
+                closeSessionUseCase))
                 .setControllerAdvice(new GroupExceptionHandler())
                 .build();
         String requestBody = """
