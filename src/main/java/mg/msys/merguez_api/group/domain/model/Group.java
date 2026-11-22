@@ -4,20 +4,18 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
+import mg.msys.merguez_api.group.domain.service.SessionSettlementCalculator;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 public final class Group {
@@ -254,64 +252,13 @@ public final class Group {
             throw new SessionClosureRejectedException("All rounds must be closed before closing the session");
         }
 
-        Map<UserId, Integer> netScores = new LinkedHashMap<>();
-        netScores.put(creator, 0);
-        participants.forEach(participant -> netScores.put(participant, 0));
-        rounds.stream()
-                .flatMap(round -> round.combats().stream())
-                .forEach(combat -> combat.winner().ifPresent(winner -> {
-                    UserId loser = combat.participants().stream()
-                            .filter(participant -> !participant.equals(winner))
-                            .findFirst()
-                            .orElseThrow();
-                    netScores.compute(winner, (ignored, score) -> score + 1);
-                    netScores.compute(loser, (ignored, score) -> score - 1);
-                }));
-
-        List<SessionPayment> payments = calculatePayments(netScores);
+        List<UserId> memberIds = members().stream().map(GroupMember::userId).toList();
+        SessionSettlement settlement = SessionSettlementCalculator.calculate(memberIds, rounds);
 
         activeOccurrence.close();
         occurrence.close();
         activeOccurrences.remove(activeOccurrence);
-        return new SessionClosureResult(occurrence, netScores, payments);
-    }
-
-    private static List<SessionPayment> calculatePayments(Map<UserId, Integer> netScores) {
-        List<UserId> creditors = netScores.entrySet().stream()
-                .filter(entry -> entry.getValue() > 0)
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toCollection(ArrayList::new));
-        List<UserId> debtors = netScores.entrySet().stream()
-                .filter(entry -> entry.getValue() < 0)
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toCollection(ArrayList::new));
-        Map<UserId, Integer> remainingCredits = new HashMap<>(netScores);
-        List<SessionPayment> payments = new ArrayList<>();
-        for (UserId creditor : creditors) {
-            for (UserId debtor : debtors) {
-                if (remainingCredits.get(creditor) > 0
-                        && remainingCredits.get(creditor).equals(-remainingCredits.get(debtor))) {
-                    int amount = remainingCredits.get(creditor);
-                    payments.add(new SessionPayment(debtor, creditor, amount));
-                    remainingCredits.put(creditor, 0);
-                    remainingCredits.put(debtor, 0);
-                    break;
-                }
-            }
-        }
-
-        for (UserId creditor : creditors) {
-            for (UserId debtor : debtors) {
-                int amount = Math.min(remainingCredits.get(creditor), -remainingCredits.get(debtor));
-                if (amount > 0) {
-                    payments.add(new SessionPayment(debtor, creditor, amount));
-                    remainingCredits.compute(creditor, (ignored, balance) -> balance - amount);
-                    remainingCredits.compute(debtor, (ignored, balance) -> balance + amount);
-                }
-            }
-        }
-
-        return payments;
+        return new SessionClosureResult(occurrence, settlement.netScores(), settlement.payments());
     }
 
     public List<SessionOccurrence> activeOccurrences() {
