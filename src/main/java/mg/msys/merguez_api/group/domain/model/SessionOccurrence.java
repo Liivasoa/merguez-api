@@ -56,19 +56,19 @@ public final class SessionOccurrence {
                 throw new IllegalArgumentException("Restored rounds must be numbered consecutively from one");
             }
         }
+        SessionOccurrence occurrence = this;
         if (roundsAttached) {
             // Rehydrating a second group snapshot must not overwrite the first one's rounds.
-            SessionOccurrence copy = new SessionOccurrence(groupId, scheduleId, startedAt);
-            copy.closed = closed;
-            for (Round round : restoredRounds) {
-                copy.rounds.add(new Round(copy, round.number(), round.status(), round.combats()));
-            }
-            copy.roundsAttached = true;
-            return copy;
+            occurrence = new SessionOccurrence(groupId, scheduleId, startedAt);
+            occurrence.closed = closed;
         }
-        rounds.addAll(restoredRounds);
-        roundsAttached = true;
-        return this;
+        for (Round round : restoredRounds) {
+            occurrence.rounds.add(round.occurrence() == occurrence
+                    ? round
+                    : new Round(occurrence, round.number(), round.status(), round.combats()));
+        }
+        occurrence.roundsAttached = true;
+        return occurrence;
     }
 
     List<Round> rounds() {
