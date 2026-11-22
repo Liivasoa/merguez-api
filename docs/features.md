@@ -65,6 +65,28 @@ Règles sur le calcul des merguez (points) :
 - Un point net positif représente des merguez à recevoir ; un point net négatif représente des merguez à payer. Les transactions doivent solder exactement ces positions, conserver la somme totale des soldes et minimiser le nombre de paiements lorsque c'est possible.
 
 
+### En tant qu'utilisateur, je veux consulter la liste de mes groupes
+
+Règles :
+- Je veux avoir la liste des groupes dans lesquels j'y figure (en tant que membre ou admin)
+- Je veux avoir le nom du groupe, description, nombre des membres, nombres de sessions programmés, si je suis admin
+
+## En tant qu'utilisateur, je veux récuperer la session en cours de mon groupe
+
+Règles :
+- Il peut y avoir une seule et unique session en cours pour un groupe donnée
+- Une session en cours doit avoir son numéro
+- Une session en cours doit avoir la session programmé qui lui correspond
+- Une session en cours doit avoir la liste des rounds terminé
+- Une session en cours doit avoir un et un seul round en cours
+- Un round contient exactement 2 participants
+- Un round peut avoir un vainqueur
+- Un round doit avoir un numéro unique pour chaque round d'une même session
+
+## En tant qu'utilisateur, je veux savoir s'il existe déjà une session en cours dans mon groupe
+
+
+
 
 ### NEXT
 - proposition de combats à la création d'un round/début de séance
