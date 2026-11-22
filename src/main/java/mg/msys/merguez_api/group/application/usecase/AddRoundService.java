@@ -27,19 +27,21 @@ public final class AddRoundService implements AddRoundUseCase {
     public Round execute(AddRoundCommand command) {
         Group group = groupLoader.loadByGroupId(command.groupId())
                 .orElseThrow(() -> new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.CONFLICT));
+                        RoundOperationRefusedException.Reason.CONFLICT,
+                        "No active session is available for this group."));
         SessionOccurrence occurrence = group.activeOccurrences().stream().findFirst()
                 .orElseThrow(() -> new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.CONFLICT));
+                        RoundOperationRefusedException.Reason.CONFLICT,
+                        "No active session is available for this group."));
         Round round;
         try {
             round = group.addRound(command.requester(), occurrence, command.combats());
         } catch (DomainConflictException exception) {
             throw new RoundOperationRefusedException(
-                    RoundOperationRefusedException.Reason.CONFLICT, exception);
+                    RoundOperationRefusedException.Reason.CONFLICT, exception.getMessage(), exception);
         } catch (DomainValidationException exception) {
             throw new RoundOperationRefusedException(
-                    RoundOperationRefusedException.Reason.INVALID_REQUEST, exception);
+                    RoundOperationRefusedException.Reason.INVALID_REQUEST, exception.getMessage(), exception);
         }
         roundRepository.create(round);
         return round;

@@ -388,7 +388,9 @@ class GroupControllerTest {
         UUID member = UUID.randomUUID();
         when(CloseRoundService.execute(any(CloseRoundCommand.class)))
                 .thenThrow(new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.CONFLICT, new IllegalStateException("private diagnostic")));
+                        RoundOperationRefusedException.Reason.CONFLICT,
+                        "Round closure conflicts with its current state.",
+                        new IllegalStateException("private diagnostic")));
 
         mockMvc.perform(post("/api/v1/groups/{groupId}/rounds/1/close", groupId)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -396,7 +398,7 @@ class GroupControllerTest {
                         {"requesterId":"%s","combats":[{"participantIds":["%s","%s"]}]}
                         """.formatted(requester, requester, member)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value("The round request was refused."));
+                .andExpect(jsonPath("$.detail").value("Round closure conflicts with its current state."));
     }
 
     @Test
@@ -532,10 +534,11 @@ class GroupControllerTest {
         UserId firstMember = new UserId(UUID.randomUUID());
         UserId secondMember = new UserId(UUID.randomUUID());
         String sensitiveDetail = "private inactive occurrence diagnostic";
+        String publicDetail = "Public detail for " + reason.toLowerCase(java.util.Locale.ROOT);
         RuntimeException cause = new RuntimeException(sensitiveDetail);
         when(AddRoundService.execute(any(AddRoundCommand.class)))
                 .thenThrow(new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.valueOf(reason), cause));
+                        RoundOperationRefusedException.Reason.valueOf(reason), publicDetail, cause));
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -553,7 +556,7 @@ class GroupControllerTest {
                 .andExpect(status().is(expectedStatus))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(expectedStatus))
-                .andExpect(jsonPath("$.detail").value("The round request was refused."))
+                .andExpect(jsonPath("$.detail").value(publicDetail))
                 .andReturn();
 
         assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);
@@ -575,10 +578,11 @@ class GroupControllerTest {
         UserId firstMember = new UserId(UUID.randomUUID());
         UserId secondMember = new UserId(UUID.randomUUID());
         String sensitiveDetail = "private invalid combat diagnostic";
+        String publicDetail = "Public detail for " + reason.toLowerCase(java.util.Locale.ROOT);
         RuntimeException cause = new RuntimeException(sensitiveDetail);
         when(AddCombatService.execute(any(AddCombatCommand.class)))
                 .thenThrow(new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.valueOf(reason), cause));
+                        RoundOperationRefusedException.Reason.valueOf(reason), publicDetail, cause));
         String requestBody = """
                 {
                   "requesterId": "%s",
@@ -595,7 +599,7 @@ class GroupControllerTest {
                 .andExpect(status().is(expectedStatus))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(expectedStatus))
-                .andExpect(jsonPath("$.detail").value("The round request was refused."))
+                .andExpect(jsonPath("$.detail").value(publicDetail))
                 .andReturn();
 
         assertTrue(result.getResponse().getStatus() >= 400 && result.getResponse().getStatus() < 500);

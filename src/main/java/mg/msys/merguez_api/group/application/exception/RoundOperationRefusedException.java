@@ -10,17 +10,23 @@ public final class RoundOperationRefusedException extends RuntimeException {
     }
 
     private final Reason reason;
+    private final String detail;
 
-    public RoundOperationRefusedException(Reason reason) {
-        this(reason, null);
+    public RoundOperationRefusedException(Reason reason, String detail) {
+        this(reason, detail, null);
     }
 
-    public RoundOperationRefusedException(Reason reason, Throwable cause) {
+    public RoundOperationRefusedException(Reason reason, String detail, Throwable cause) {
         super("Round operation refused", cause);
         this.reason = Objects.requireNonNull(reason);
+        this.detail = Objects.requireNonNull(detail);
     }
 
     public Reason reason() {
         return reason;
+    }
+
+    public String detail() {
+        return detail;
     }
 }

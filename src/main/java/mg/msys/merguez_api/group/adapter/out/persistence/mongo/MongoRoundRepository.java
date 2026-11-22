@@ -39,7 +39,9 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
                 filter, roundUpdate("rounds." + round.number(), round));
         if (result.getMatchedCount() == 0) {
-            throw new RoundOperationRefusedException(RoundOperationRefusedException.Reason.CONFLICT);
+            throw new RoundOperationRefusedException(
+                    RoundOperationRefusedException.Reason.CONFLICT,
+                    "The active session is no longer available.");
         }
     }
 
@@ -54,7 +56,9 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
                 filter, roundUpdate(path, updated));
         if (result.getMatchedCount() == 0) {
-            throw new RoundOperationRefusedException(RoundOperationRefusedException.Reason.CONFLICT);
+            throw new RoundOperationRefusedException(
+                    RoundOperationRefusedException.Reason.CONFLICT,
+                    "The round changed before the update could be saved.");
         }
     }
 
@@ -71,7 +75,9 @@ class MongoRoundRepository implements RoundRepository, LoadGroupWithActiveOccurr
         var result = mongoTemplate.getCollection("session-occurrences").updateOne(
                 filter, roundUpdate("rounds." + round.number(), round));
         if (result.getMatchedCount() == 0) {
-            throw new RoundOperationRefusedException(RoundOperationRefusedException.Reason.CONFLICT);
+            throw new RoundOperationRefusedException(
+                    RoundOperationRefusedException.Reason.CONFLICT,
+                    "The round conflicts with the current session state.");
         }
     }
 

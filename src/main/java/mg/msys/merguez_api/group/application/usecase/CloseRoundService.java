@@ -26,24 +26,26 @@ public final class CloseRoundService implements CloseRoundUseCase {
     public Round execute(CloseRoundCommand command) {
         Group group = groupLoader.loadByGroupId(command.groupId())
                 .orElseThrow(() -> new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.CONFLICT));
+                        RoundOperationRefusedException.Reason.CONFLICT,
+                        "No active session is available for this group."));
         SessionOccurrence occurrence = group.activeOccurrences().stream().findFirst()
                 .orElseThrow(() -> new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.CONFLICT));
+                        RoundOperationRefusedException.Reason.CONFLICT,
+                        "No active session is available for this group."));
         Round round = group.rounds(occurrence).stream()
                 .filter(candidate -> candidate.number() == command.roundNumber())
                 .findFirst()
                 .orElseThrow(() -> new RoundOperationRefusedException(
-                        RoundOperationRefusedException.Reason.INVALID_REQUEST));
+                        RoundOperationRefusedException.Reason.INVALID_REQUEST, "Round not found."));
         Round closed;
         try {
             closed = group.closeRound(command.requester(), round, command.combats());
         } catch (DomainConflictException exception) {
             throw new RoundOperationRefusedException(
-                    RoundOperationRefusedException.Reason.CONFLICT, exception);
+                    RoundOperationRefusedException.Reason.CONFLICT, exception.getMessage(), exception);
         } catch (DomainValidationException exception) {
             throw new RoundOperationRefusedException(
-                    RoundOperationRefusedException.Reason.INVALID_REQUEST, exception);
+                    RoundOperationRefusedException.Reason.INVALID_REQUEST, exception.getMessage(), exception);
         }
         roundRepository.replace(round, closed);
         return closed;

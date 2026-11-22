@@ -62,7 +62,7 @@ public class GroupExceptionHandler {
                 ? HttpStatus.CONFLICT
                 : HttpStatus.BAD_REQUEST;
         log.debug("Round request refused", ex);
-        return ProblemDetail.forStatusAndDetail(status, "The round request was refused.");
+        return ProblemDetail.forStatusAndDetail(status, ex.detail());
     }
 
     @ExceptionHandler(SessionClosureRefusedException.class)
