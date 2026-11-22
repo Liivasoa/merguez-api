@@ -4,9 +4,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,7 +13,6 @@ import java.util.stream.Stream;
 import mg.msys.merguez_api.group.domain.exception.GroupAccessDeniedException;
 import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 import mg.msys.merguez_api.group.domain.exception.SessionClosureRejectedException;
-import mg.msys.merguez_api.group.domain.service.SessionSettlementCalculator;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 public final class Group {
@@ -26,8 +23,8 @@ public final class Group {
     private final UserId creator;
     private final List<UserId> participants;
     private final List<Session> sessions = new ArrayList<>();
-    private final List<SessionOccurrence> activeOccurrences = new ArrayList<>();
-    private final Map<SessionOccurrence, List<Round>> roundsByOccurrence = new IdentityHashMap<>();
+    private final List<SessionOccurrence> closedOccurrences = new ArrayList<>();
+    private SessionOccurrence activeOccurrence;
 
     private Group(GroupId id, String name, String description, UserId creator, List<UserId> participants) {
         this.id = id;
@@ -86,17 +83,7 @@ public final class Group {
         if (group.sessions.stream().noneMatch(session -> session.id().equals(activeOccurrence.scheduleId()))) {
             throw new IllegalArgumentException("Active occurrence must reference a scheduled session");
         }
-        for (int index = 0; index < rounds.size(); index++) {
-            Round round = rounds.get(index);
-            if (round == null || !activeOccurrence.equals(round.occurrence())) {
-                throw new IllegalArgumentException("Restored rounds must belong to the active occurrence");
-            }
-            if (round.number() != index + 1) {
-                throw new IllegalArgumentException("Restored rounds must be numbered consecutively from one");
-            }
-        }
-        group.activeOccurrences.add(activeOccurrence);
-        group.roundsByOccurrence.put(activeOccurrence, new ArrayList<>(rounds));
+        group.activeOccurrence = activeOccurrence.attachRounds(rounds);
         return group;
     }
 
@@ -136,155 +123,87 @@ public final class Group {
         if (scheduledSession == null || !sessions.contains(scheduledSession)) {
             throw new IllegalArgumentException("Scheduled session must belong to this group");
         }
-        if (!activeOccurrences.isEmpty()) {
+        if (activeOccurrence != null) {
             throw new IllegalStateException("A session is already started in this group");
         }
-        SessionOccurrence occurrence = new SessionOccurrence(id, scheduledSession.id(), Instant.now());
-        activeOccurrences.add(occurrence);
-        roundsByOccurrence.put(occurrence, new ArrayList<>());
-        return occurrence;
+        activeOccurrence = new SessionOccurrence(id, scheduledSession.id(), Instant.now()).attachRounds(List.of());
+        return activeOccurrence;
     }
 
     public Round addRound(UserId requester, SessionOccurrence occurrence, List<Combat> combats) {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can add rounds");
         }
-        if (occurrence == null || occurrence.isClosed() || !activeOccurrences.contains(occurrence)) {
-            throw new IllegalStateException("Session occurrence must be in progress");
-        }
-        if (roundsByOccurrence.values().stream()
-                .flatMap(List::stream)
-                .anyMatch(round -> round.status() == RoundStatus.IN_PROGRESS)) {
-            throw new IllegalStateException("A round is already in progress in this group");
-        }
-        if (combats == null || combats.isEmpty()) {
-            throw new IllegalArgumentException("A round must contain at least one combat");
-        }
-        for (Combat combat : combats) {
-            if (!combat.participants().stream().allMatch(this::isMemberOrAdmin)) {
-                throw new IllegalArgumentException("Combat participants must belong to this group");
-            }
-        }
-        SessionOccurrence activeOccurrence = activeOccurrences.get(activeOccurrences.indexOf(occurrence));
-        List<Round> rounds = roundsByOccurrence.get(activeOccurrence);
-        Round round = new Round(activeOccurrence, rounds.size() + 1, combats);
-        rounds.add(round);
-        return round;
+        return requireActiveOccurrence(occurrence).addRound(combats, this::requireGroupParticipants);
     }
 
     public Round addCombat(UserId requester, Round round, Combat combat) {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can add combats");
         }
-        if (round == null || round.occurrence().isClosed() || !activeOccurrences.contains(round.occurrence())) {
-            throw new IllegalStateException("Session occurrence must be in progress");
-        }
-        List<Round> rounds = findRounds(round.occurrence());
-        int roundIndex = rounds == null ? -1 : rounds.indexOf(round);
-        if (roundIndex < 0) {
-            throw new IllegalArgumentException("Round must belong to this group");
-        }
-        if (round.status() == RoundStatus.CLOSED) {
-            throw new IllegalStateException("Round is closed");
-        }
-        if (!combat.participants().stream().allMatch(this::isMemberOrAdmin)) {
-            throw new IllegalArgumentException("Combat participants must belong to this group");
-        }
-        if (round.combats().stream()
-                .flatMap(existingCombat -> existingCombat.participants().stream())
-                .anyMatch(combat.participants()::contains)) {
-            throw new IllegalArgumentException("A participant can only appear in one combat per round");
-        }
-
-        List<Combat> updatedCombats = new ArrayList<>(round.combats());
-        updatedCombats.add(combat);
-        Round updatedRound = new Round(round.occurrence(), round.number(), round.status(), updatedCombats);
-        rounds.set(roundIndex, updatedRound);
-        return updatedRound;
+        return requireActiveOccurrence(round == null ? null : round.occurrence())
+                .addCombat(round, combat, this::requireGroupParticipants);
     }
 
     public Round closeRound(UserId requester, Round round, List<Combat> results) {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can close rounds");
         }
-        if (round == null || round.occurrence().isClosed() || !activeOccurrences.contains(round.occurrence())) {
-            throw new IllegalStateException("Session occurrence must be in progress");
-        }
-        List<Round> rounds = findRounds(round.occurrence());
-        int index = rounds == null ? -1 : rounds.indexOf(round);
-        if (index < 0) {
-            throw new IllegalArgumentException("Round must belong to this group");
-        }
-        if (round.status() != RoundStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Round must be in progress");
-        }
-        if (results == null || results.size() != round.combats().size() || results.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("Results must match all round combats");
-        }
-        List<Combat> updated = new ArrayList<>();
-        for (Combat existing : round.combats()) {
-            List<Combat> matches = results.stream()
-                    .filter(result -> result.participants().containsAll(existing.participants()))
-                    .toList();
-            if (matches.size() != 1) {
-                throw new IllegalArgumentException("Results must match all round combats");
-            }
-            updated.add(new Combat(existing.participants(), matches.getFirst().winner()));
-        }
-        Round closed = new Round(round.occurrence(), round.number(), RoundStatus.CLOSED, updated);
-        rounds.set(index, closed);
-        return closed;
+        return requireActiveOccurrence(round == null ? null : round.occurrence()).closeRound(round, results);
     }
 
     public SessionClosureResult closeSession(UserId requester, SessionOccurrence occurrence) {
         if (!isMemberOrAdmin(requester)) {
             throw new GroupAccessDeniedException("Only group members can close sessions");
         }
-        if (occurrence == null || occurrence.isClosed() || !activeOccurrences.contains(occurrence)) {
+        if (!isActiveOccurrence(occurrence)) {
             throw new SessionClosureRejectedException("Session occurrence must be in progress");
-        }
-        SessionOccurrence activeOccurrence = activeOccurrences.get(activeOccurrences.indexOf(occurrence));
-        List<Round> rounds = roundsByOccurrence.get(activeOccurrence);
-        if (rounds == null || rounds.isEmpty()) {
-            throw new SessionClosureRejectedException("A session must contain at least one round");
-        }
-        if (rounds.stream().anyMatch(round -> round.status() != RoundStatus.CLOSED)) {
-            throw new SessionClosureRejectedException("All rounds must be closed before closing the session");
         }
 
         List<UserId> memberIds = members().stream().map(GroupMember::userId).toList();
-        SessionSettlement settlement = SessionSettlementCalculator.calculate(memberIds, rounds);
-
-        activeOccurrence.close();
-        occurrence.close();
-        activeOccurrences.remove(activeOccurrence);
+        SessionSettlement settlement = activeOccurrence.settleAndClose(memberIds);
+        occurrence.markClosed();
+        closedOccurrences.add(activeOccurrence);
+        activeOccurrence = null;
         return new SessionClosureResult(occurrence, settlement.netScores(), settlement.payments());
     }
 
     public List<SessionOccurrence> activeOccurrences() {
-        return List.copyOf(activeOccurrences);
+        return activeOccurrence == null ? List.of() : List.of(activeOccurrence);
     }
 
     public List<Round> rounds(SessionOccurrence occurrence) {
-        List<Round> rounds = findRounds(occurrence);
-        return rounds == null ? List.of() : List.copyOf(rounds);
-    }
-
-    private List<Round> findRounds(SessionOccurrence occurrence) {
-        List<Round> rounds = roundsByOccurrence.get(occurrence);
-        if (rounds != null || occurrence == null) {
-            return rounds;
-        }
-        for (SessionOccurrence activeOccurrence : activeOccurrences) {
-            if (activeOccurrence.equals(occurrence)) {
-                return roundsByOccurrence.get(activeOccurrence);
+        for (SessionOccurrence closedOccurrence : closedOccurrences) {
+            if (closedOccurrence == occurrence) {
+                return closedOccurrence.rounds();
             }
         }
-        return roundsByOccurrence.entrySet().stream()
-                .filter(entry -> entry.getKey().equals(occurrence))
-                .map(Map.Entry::getValue)
+        if (activeOccurrence != null && activeOccurrence.equals(occurrence)) {
+            return activeOccurrence.rounds();
+        }
+        return closedOccurrences.stream()
+                .filter(closedOccurrence -> closedOccurrence.equals(occurrence))
                 .findFirst()
-                .orElse(null);
+                .map(SessionOccurrence::rounds)
+                .orElseGet(List::of);
+    }
+
+    private SessionOccurrence requireActiveOccurrence(SessionOccurrence occurrence) {
+        if (!isActiveOccurrence(occurrence)) {
+            throw new IllegalStateException("Session occurrence must be in progress");
+        }
+        return activeOccurrence;
+    }
+
+    private boolean isActiveOccurrence(SessionOccurrence occurrence) {
+        return occurrence != null && !occurrence.isClosed()
+                && activeOccurrence != null && activeOccurrence.equals(occurrence);
+    }
+
+    private void requireGroupParticipants(Combat combat) {
+        if (!combat.participants().stream().allMatch(this::isMemberOrAdmin)) {
+            throw new IllegalArgumentException("Combat participants must belong to this group");
+        }
     }
 
     private boolean isMemberOrAdmin(UserId requester) {

@@ -51,6 +51,8 @@ class AddRoundNumberingTest {
         assertEquals(2, secondRound.number());
         assertEquals(RoundStatus.IN_PROGRESS, firstRound.status());
         assertEquals(RoundStatus.IN_PROGRESS, secondRound.status());
+        assertEquals(List.of(firstRound), group.rounds(occurrence));
+        assertEquals(List.of(finishedRound, secondRound), restored.rounds(secondRound.occurrence()));
     }
 
     @Test

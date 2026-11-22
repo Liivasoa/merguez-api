@@ -57,6 +57,16 @@ class CloseRoundTest {
                         new Combat(List.of(f.admin, f.first), Optional.empty())));
     }
 
+    @Test
+    void rejectsClosingAnOutdatedRoundSnapshot() {
+        Fixture f = new Fixture();
+        Round closed = f.group.closeRound(f.admin, f.round, f.round.combats());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> f.group.closeRound(f.admin, f.round, f.round.combats()));
+        assertEquals(List.of(closed), f.group.rounds(f.occurrence));
+    }
+
     private static UserId user() {
         return new UserId(UUID.randomUUID());
     }
