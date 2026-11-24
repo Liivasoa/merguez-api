@@ -29,6 +29,21 @@ import mg.msys.merguez_api.user.domain.model.UserId;
 class MongoGroupRepositoryUnitTest {
 
     @Test
+    @DisplayName("No groups for a user produces an empty summary collection")
+    void noGroupsForAUserProducesAnEmptySummaryCollection() {
+        SpringDataGroupRepository springRepository = mock(SpringDataGroupRepository.class);
+        MongoGroupRepository repository = new MongoGroupRepository(springRepository);
+        LoadGroupSummariesPort groupSummariesLoader = repository;
+        UserId requestedUser = new UserId(UUID.randomUUID());
+        when(springRepository.findAllByMembersUserId(requestedUser.value().toString())).thenReturn(List.of());
+
+        List<GroupSummary> summaries = groupSummariesLoader.loadGroupSummaries(requestedUser);
+
+        assertEquals(List.of(), summaries);
+        verify(springRepository).findAllByMembersUserId(requestedUser.value().toString());
+    }
+
+    @Test
     @DisplayName("Groups can be loaded by membership with their requested summaries")
     void groupsCanBeLoadedByMembershipWithTheirRequestedSummaries() {
         SpringDataGroupRepository springRepository = mock(SpringDataGroupRepository.class);
