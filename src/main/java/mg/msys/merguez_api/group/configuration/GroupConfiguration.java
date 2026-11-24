@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.port.out.LoadGroupSummariesPort;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
@@ -16,6 +17,7 @@ import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.port.in.ListMyGroupsUseCase;
 import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddCombatService;
 import mg.msys.merguez_api.group.application.usecase.AddRoundService;
@@ -24,6 +26,7 @@ import mg.msys.merguez_api.group.application.usecase.CloseSessionService;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupService;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionService;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsService;
+import mg.msys.merguez_api.group.application.usecase.ListMyGroupsService;
 import mg.msys.merguez_api.group.application.usecase.StartSessionService;
 
 @Configuration
@@ -72,6 +75,11 @@ public class GroupConfiguration {
     @Bean
     GetGroupSessionsUseCase getGroupSessionsUseCase(GroupRepository groupRepository) {
         return new GetGroupSessionsService(groupRepository);
+    }
+
+    @Bean
+    ListMyGroupsUseCase listMyGroupsUseCase(LoadGroupSummariesPort groupSummariesLoader) {
+        return new ListMyGroupsService(groupSummariesLoader);
     }
 
     @Bean

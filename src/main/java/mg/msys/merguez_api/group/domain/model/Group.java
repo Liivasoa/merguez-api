@@ -260,6 +260,13 @@ public final class Group {
         return participants.contains(userId);
     }
 
+    public Optional<GroupSummary> summaryFor(UserId userId) {
+        if (!isMemberOrAdmin(userId)) {
+            return Optional.empty();
+        }
+        return Optional.of(new GroupSummary(name, description(), members().size(), sessions.size(), isAdmin(userId)));
+    }
+
     @Override
     public boolean equals(Object other) {
         return other instanceof Group group
