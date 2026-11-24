@@ -1,9 +1,13 @@
 package mg.msys.merguez_api.group.domain.model;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -34,6 +38,23 @@ class ListMyGroupsTest {
 
         assertTrue(group.summaryFor(admin).isPresent());
         assertTrue(group.summaryFor(admin).orElseThrow().admin());
+    }
+
+    @Test
+    void providesRequestedGroupSummaryDetails() {
+        UserId admin = userId();
+        Group group = Group.create("Weekend group", "A group description", admin,
+                List.of(userId(), userId(), userId()));
+        group.createSession(admin, "Saturday", DayOfWeek.SATURDAY, LocalTime.of(10, 0));
+        group.createSession(admin, "Sunday", DayOfWeek.SUNDAY, LocalTime.of(10, 0));
+
+        GroupSummary summary = group.summaryFor(admin).orElseThrow();
+
+        assertEquals("Weekend group", summary.name());
+        assertEquals(Optional.of("A group description"), summary.description());
+        assertEquals(4, summary.memberCount());
+        assertEquals(2, summary.scheduledSessionCount());
+        assertTrue(summary.admin());
     }
 
     private static UserId userId() {
