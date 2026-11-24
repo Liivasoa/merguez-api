@@ -57,6 +57,21 @@ class ListMyGroupsTest {
         assertTrue(summary.admin());
     }
 
+    @Test
+    void returnsNoSummaryForUserWithoutGroupAssociation() {
+        UserId user = userId();
+        List<Group> groups = List.of(
+                Group.create("First", userId(), List.of(userId())),
+                Group.create("Second", userId(), List.of(userId())));
+
+        List<GroupSummary> summaries = groups.stream()
+                .map(group -> group.summaryFor(user))
+                .flatMap(Optional::stream)
+                .toList();
+
+        assertTrue(summaries.isEmpty());
+    }
+
     private static UserId userId() {
         return new UserId(UUID.randomUUID());
     }
