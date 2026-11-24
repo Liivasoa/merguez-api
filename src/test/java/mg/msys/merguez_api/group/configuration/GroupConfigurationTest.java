@@ -20,6 +20,7 @@ import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.port.in.ListMyGroupsUseCase;
 import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
 
 class GroupConfigurationTest {
@@ -31,6 +32,7 @@ class GroupConfigurationTest {
             CloseRoundUseCase.class,
             CreateSessionUseCase.class,
             GetGroupSessionsUseCase.class,
+            ListMyGroupsUseCase.class,
             CreateGroupUseCase.class,
             StartSessionUseCase.class,
             CloseSessionUseCase.class
