@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.DayOfWeek;
@@ -19,11 +20,37 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import mg.msys.merguez_api.group.application.port.out.LoadGroupSummariesPort;
 import mg.msys.merguez_api.group.domain.model.Group;
+import mg.msys.merguez_api.group.domain.model.GroupSummary;
 import mg.msys.merguez_api.group.domain.model.Session;
 import mg.msys.merguez_api.user.domain.model.UserId;
 
 class MongoGroupRepositoryUnitTest {
+
+    @Test
+    @DisplayName("Groups can be loaded by membership with their requested summaries")
+    void groupsCanBeLoadedByMembershipWithTheirRequestedSummaries() {
+        SpringDataGroupRepository springRepository = mock(SpringDataGroupRepository.class);
+        MongoGroupRepository repository = new MongoGroupRepository(springRepository);
+        LoadGroupSummariesPort groupSummariesLoader = repository;
+        UserId requestedUser = new UserId(UUID.randomUUID());
+        Group adminGroup = Group.create("Admin dojo", "Admin description", requestedUser,
+                List.of(new UserId(UUID.randomUUID()), new UserId(UUID.randomUUID())));
+        adminGroup.createSession(requestedUser, "Tuesday", DayOfWeek.TUESDAY, LocalTime.of(18, 0));
+        adminGroup.createSession(requestedUser, "Thursday", DayOfWeek.THURSDAY, LocalTime.of(18, 0));
+        Group memberGroup = Group.create("Member dojo", new UserId(UUID.randomUUID()), List.of(requestedUser));
+        when(springRepository.findAllByMembersUserId(requestedUser.value().toString()))
+                .thenReturn(List.of(GroupDocument.from(adminGroup), GroupDocument.from(memberGroup)));
+
+        List<GroupSummary> summaries = groupSummariesLoader.loadGroupSummaries(requestedUser);
+
+        assertEquals(2, summaries.size());
+        assertTrue(summaries.contains(
+                new GroupSummary("Admin dojo", Optional.of("Admin description"), 3, 2, true)));
+        assertTrue(summaries.contains(new GroupSummary("Member dojo", Optional.empty(), 2, 0, false)));
+        verify(springRepository).findAllByMembersUserId(requestedUser.value().toString());
+    }
 
     @Test
     @DisplayName("A group loaded through the adapter includes its saved session")
