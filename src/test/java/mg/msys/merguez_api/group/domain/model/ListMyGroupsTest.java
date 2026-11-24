@@ -27,6 +27,15 @@ class ListMyGroupsTest {
         assertFalse(unrelatedGroup.summaryFor(member).isPresent());
     }
 
+    @Test
+    void includesGroupWhereUserIsAdmin() {
+        UserId admin = userId();
+        Group group = Group.create("Admin group", admin, List.of(userId()));
+
+        assertTrue(group.summaryFor(admin).isPresent());
+        assertTrue(group.summaryFor(admin).orElseThrow().admin());
+    }
+
     private static UserId userId() {
         return new UserId(UUID.randomUUID());
     }
