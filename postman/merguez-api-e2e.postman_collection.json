@@ -251,6 +251,26 @@
         "body": {"mode": "raw", "raw": "{\"requesterId\": \"{{creatorId}}\"}"},
         "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/{{sessionId}}/close"
       }
+    },
+    {
+      "name": "13. Lister mes groupes",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('The created group appears in the user group summaries', function () {",
+        "    pm.response.to.have.status(200);",
+        "    const groups = pm.response.json();",
+        "    pm.expect(groups).to.be.an('array');",
+        "    const group = groups.find(function (summary) { return summary.name === 'E2E training group'; });",
+        "    pm.expect(group).to.exist;",
+        "    pm.expect(group.description).to.equal('Complete happy path');",
+        "    pm.expect(group.memberCount).to.equal(6);",
+        "    pm.expect(group.scheduledSessionCount).to.equal(1);",
+        "    pm.expect(group.admin).to.equal(true);",
+        "});"
+      ]}}],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/groups?userId={{creatorId}}"
+      }
     }
   ]
 }

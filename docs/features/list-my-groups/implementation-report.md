@@ -18,6 +18,7 @@ La feature expose les groupes dont l'utilisateur est membre ou admin, avec leur 
 - `mvn.cmd '-Duser.home=C:\Users\livar' -o '-Dtest=GroupControllerTest' test` : 74 tests réussis.
 - `mvn.cmd '-Duser.home=C:\Users\livar' -o '-Dtest=GroupConfigurationTest' test` : 9 tests réussis.
 - `mvn.cmd '-Duser.home=C:\Users\livar' -o test` : suite complète réussie, 252 tests, aucune erreur. Les tests Mongo Testcontainers ont également passé avec Docker disponible.
+- Les deux collections Postman sont valides en JSON et leur diff a été vérifié. La collection standard couvre les groupes associés et le résultat vide; la collection E2E vérifie les champs résumés du groupe créé. Les requêtes Postman n'ont pas été exécutées contre une API en service.
 - `git diff --check` : réussi.
 - Le validateur d'issues n'a pas pu être exécuté : aucun lanceur `py`, `python` ou `python3` n'est disponible. La structure Gherkin, l'ordre des étapes, les références D1–D4 et les scénarios ont été contrôlés manuellement.
 
@@ -26,6 +27,7 @@ La feature expose les groupes dont l'utilisateur est membre ou admin, avec leur 
 Les commits de la feature sur `feature/list-my-groups` sont :
 
 - Domain et Application : `e8f0b09`, `09ac291`, `29be321`, `3e7b78e`, `aa2e07c`, `99e980d`, `72bcfb9`.
+- Test de liste vide Application : `d52366d`.
 - Adapter sortant : `2e9b50f`, `d95eefc`, `0638532`.
 - Adapter REST entrant et câblage : `d683191`, `7fe203d`, `05e553b`, `b92f3f1`, `9d1f888`.
 
@@ -33,6 +35,8 @@ Le commit `b92f3f1` a ajouté le cas d'usage à la vérification du câblage Spr
 
 ## Notes
 
-Le changement local non commité de `src/test/java/mg/msys/merguez_api/group/application/usecase/ListMyGroupsServiceTest.java` a été conservé et n'a été inclus dans aucun commit de feature. Il ajoute un test pour la liste vide.
+Le test `returnsAnEmptyListWhenTheUserHasNoAssociatedGroups` couvre le scénario de liste vide de la couche Application; il a été commité dans `d52366d`.
 
 Le paramètre `userId` est transmis par l'appelant; l'authentification et la détermination de l'utilisateur courant sont hors périmètre des issues. La branche est locale : la connexion SSH à `origin` a échoué (`Permission denied`), donc aucun push ni pull request n'a été créé.
+
+Les collections `postman/merguez-api.postman_collection.json` et `postman/merguez-api-e2e.postman_collection.json` incluent les vérifications Postman de cette feature.

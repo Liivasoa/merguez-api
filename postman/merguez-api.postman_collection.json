@@ -284,6 +284,68 @@
               "path": ["api", "v1", "groups"]
             }
           }
+        },
+        {
+          "name": "Lister mes groupes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Group summaries are returned for the requested user', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const groups = pm.response.json();",
+                  "    pm.expect(groups).to.be.an('array');",
+                  "    pm.expect(groups.some(function (group) { return group.description === 'Groupe de travail' && group.memberCount === 6 && group.scheduledSessionCount === 0 && group.admin === true; })).to.equal(true);",
+                  "    groups.forEach(function (group) {",
+                  "        pm.expect(group.name).to.be.a('string').and.not.empty;",
+                  "        pm.expect(group).to.have.property('memberCount').that.is.a('number');",
+                  "        pm.expect(group).to.have.property('scheduledSessionCount').that.is.a('number');",
+                  "        pm.expect(group).to.have.property('admin').that.is.a('boolean');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/groups?userId={{creatorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "groups"],
+              "query": [{"key": "userId", "value": "{{creatorId}}"}]
+            }
+          }
+        },
+        {
+          "name": "Lister mes groupes - aucun groupe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('An unassociated user receives an empty group list', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json()).to.deep.equal([]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/groups?userId={{$guid}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "groups"],
+              "query": [{"key": "userId", "value": "{{$guid}}"}]
+            }
+          }
         }
       ]
     }
