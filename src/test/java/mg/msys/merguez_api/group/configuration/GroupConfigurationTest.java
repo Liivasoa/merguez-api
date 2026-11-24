@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
+import mg.msys.merguez_api.group.application.port.out.LoadGroupSummariesPort;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
 import mg.msys.merguez_api.group.application.port.out.RoundRepository;
@@ -40,6 +41,7 @@ class GroupConfigurationTest {
     void registersGroupUseCasesAsSpringBeans(Class<?> useCaseType) {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.registerBean(GroupRepository.class, () -> mock(GroupRepository.class));
+            context.registerBean(LoadGroupSummariesPort.class, () -> mock(LoadGroupSummariesPort.class));
             context.registerBean(LoadGroupWithActiveOccurrencePort.class,
                     () -> mock(LoadGroupWithActiveOccurrencePort.class));
             context.registerBean(RoundRepository.class, () -> mock(RoundRepository.class));
