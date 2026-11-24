@@ -1163,6 +1163,20 @@ class GroupControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/groups returns an empty collection when the user has no groups")
+    void listMyGroupsReturnsEmptyCollectionWhenTheUserHasNoGroups() throws Exception {
+        UserId requestedUser = new UserId(UUID.randomUUID());
+        when(ListMyGroupsService.execute(requestedUser)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/groups").param("userId", requestedUser.value().toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("[]"));
+
+        verify(ListMyGroupsService).execute(requestedUser);
+    }
+
+    @Test
     @DisplayName("POST /api/v1/groups executes the use case and returns 201 Created with the mapped group")
     void createGroupReturnsCreatedWithMappedResponse() throws Exception {
         // Given a creator "Alice" and a participant "Bob"
