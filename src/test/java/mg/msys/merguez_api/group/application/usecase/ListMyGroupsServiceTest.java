@@ -34,4 +34,15 @@ class ListMyGroupsServiceTest {
         assertEquals(requestedUser, loadedUser.get());
         assertEquals(expectedSummaries, result);
     }
+
+    @Test
+    void returnsAnEmptyListWhenTheUserHasNoAssociatedGroups() {
+        UserId requestedUser = new UserId(UUID.randomUUID());
+        LoadGroupSummariesPort port = ignored -> List.of();
+        ListMyGroupsUseCase useCase = new ListMyGroupsService(port);
+
+        List<GroupSummary> result = useCase.execute(requestedUser);
+
+        assertEquals(List.of(), result);
+    }
 }
