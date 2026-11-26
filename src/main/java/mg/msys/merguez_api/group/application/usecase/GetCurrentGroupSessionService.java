@@ -3,6 +3,7 @@ package mg.msys.merguez_api.group.application.usecase;
 import java.util.List;
 import java.util.Objects;
 
+import mg.msys.merguez_api.group.application.exception.CurrentGroupSessionNotFoundException;
 import mg.msys.merguez_api.group.application.port.in.GetCurrentGroupSessionUseCase;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.result.CurrentGroupSessionResult;
@@ -23,7 +24,8 @@ public final class GetCurrentGroupSessionService implements GetCurrentGroupSessi
 
     @Override
     public CurrentGroupSessionResult execute(GroupId groupId) {
-        Group group = groupLoader.loadByGroupId(groupId).orElseThrow();
+        Group group = groupLoader.loadByGroupId(groupId)
+                .orElseThrow(() -> new CurrentGroupSessionNotFoundException(groupId));
         SessionOccurrence occurrence = group.activeOccurrences().getFirst();
         Session scheduledSession = group.sessions().stream()
                 .filter(session -> session.id().equals(occurrence.scheduleId()))
