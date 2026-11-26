@@ -73,6 +73,7 @@ import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.port.in.ListMyGroupsUseCase;
 import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddRoundService;
 import mg.msys.merguez_api.group.application.usecase.AddCombatService;
@@ -87,6 +88,7 @@ import mg.msys.merguez_api.group.domain.exception.InvalidGroupException;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
 import mg.msys.merguez_api.group.domain.model.GroupId;
+import mg.msys.merguez_api.group.domain.model.GroupSummary;
 import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.RoundStatus;
 import mg.msys.merguez_api.group.domain.model.Session;
@@ -103,6 +105,9 @@ class GroupControllerTest {
 
     @MockitoBean
     private CreateGroupUseCase CreateGroupService;
+
+    @MockitoBean
+    private ListMyGroupsUseCase ListMyGroupsService;
 
     @MockitoBean
     private CreateSessionUseCase CreateSessionService;
@@ -1129,6 +1134,46 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$[0].day").value("TUESDAY"))
                 .andExpect(jsonPath("$[0].startTime").value(anyOf(is("14:30"), is("14:30:00"))));
         verify(GetGroupSessionsService).execute(groupId);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/groups returns summaries for the requested user")
+    void listMyGroupsReturnsMappedSummariesForTheRequestedUser() throws Exception {
+        UserId requestedUser = new UserId(UUID.randomUUID());
+        List<GroupSummary> summaries = List.of(
+                new GroupSummary("Tuesday dojo", Optional.of("Weekly sessions"), 4, 2, false),
+                new GroupSummary("Thursday dojo", Optional.empty(), 3, 1, true));
+        when(ListMyGroupsService.execute(requestedUser)).thenReturn(summaries);
+
+        mockMvc.perform(get("/api/v1/groups").param("userId", requestedUser.value().toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$[0].name").value("Tuesday dojo"))
+                .andExpect(jsonPath("$[0].description").value("Weekly sessions"))
+                .andExpect(jsonPath("$[0].memberCount").value(4))
+                .andExpect(jsonPath("$[0].scheduledSessionCount").value(2))
+                .andExpect(jsonPath("$[0].admin").value(false))
+                .andExpect(jsonPath("$[1].name").value("Thursday dojo"))
+                .andExpect(jsonPath("$[1].description").doesNotExist())
+                .andExpect(jsonPath("$[1].memberCount").value(3))
+                .andExpect(jsonPath("$[1].scheduledSessionCount").value(1))
+                .andExpect(jsonPath("$[1].admin").value(true));
+
+        verify(ListMyGroupsService).execute(requestedUser);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/groups returns an empty collection when the user has no groups")
+    void listMyGroupsReturnsEmptyCollectionWhenTheUserHasNoGroups() throws Exception {
+        UserId requestedUser = new UserId(UUID.randomUUID());
+        when(ListMyGroupsService.execute(requestedUser)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/groups").param("userId", requestedUser.value().toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("[]"));
+
+        verify(ListMyGroupsService).execute(requestedUser);
     }
 
     @Test
