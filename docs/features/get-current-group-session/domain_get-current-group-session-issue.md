@@ -54,4 +54,4 @@ Then son numéro est disponible pour l’identifier
 And sa liste de combats est disponible
 
 **Notes**
-- Le comportement de la récupération lorsqu’aucune session n’est en cours n’est pas précisé.
+- L’absence d’une occurrence active est traduite en erreur applicative par le cas d’utilisation; aucune règle de récupération supplémentaire n’est requise du domaine.

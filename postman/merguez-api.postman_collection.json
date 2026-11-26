@@ -664,6 +664,67 @@
                   "path": ["api", "v1", "groups", "{{groupId}}", "rounds"]
                 }
               }
+            },
+            {
+              "name": "Récupérer la session en cours du groupe",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Current group session and round are returned', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "    const result = pm.response.json();",
+                      "    pm.expect(result.occurrence.groupId).to.equal(pm.variables.get('groupId'));",
+                      "    pm.expect(result.occurrence.scheduleId).to.equal(pm.variables.get('sessionId'));",
+                      "    pm.expect(result.scheduledSession.id).to.equal(pm.variables.get('sessionId'));",
+                      "    pm.expect(result.completedRounds).to.be.an('array');",
+                      "    pm.expect(result.currentRound.number).to.equal(Number(pm.variables.get('roundNumber')));",
+                      "    pm.expect(result.currentRound.status).to.equal('IN_PROGRESS');",
+                      "    pm.expect(result.currentRound.combats).to.be.an('array').and.not.empty;",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/current",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{groupId}}", "sessions", "current"]
+                }
+              }
+            },
+            {
+              "name": "Récupérer la session en cours - absente (404)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Missing current session returns a 404 ProblemDetail', function () {",
+                      "    pm.response.to.have.status(404);",
+                      "    const problem = pm.response.json();",
+                      "    pm.expect(problem.status).to.equal(404);",
+                      "    pm.expect(problem.detail).to.equal('Current group session not found.');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/groups/{{$guid}}/sessions/current",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "groups", "{{$guid}}", "sessions", "current"]
+                }
+              }
             }
           ]
         },

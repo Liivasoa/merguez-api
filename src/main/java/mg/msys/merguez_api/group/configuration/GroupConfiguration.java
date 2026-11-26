@@ -16,6 +16,7 @@ import mg.msys.merguez_api.group.application.port.in.CloseRoundUseCase;
 import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.GetCurrentGroupSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
 import mg.msys.merguez_api.group.application.port.in.ListMyGroupsUseCase;
 import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
@@ -25,6 +26,7 @@ import mg.msys.merguez_api.group.application.usecase.CloseRoundService;
 import mg.msys.merguez_api.group.application.usecase.CloseSessionService;
 import mg.msys.merguez_api.group.application.usecase.CreateGroupService;
 import mg.msys.merguez_api.group.application.usecase.CreateSessionService;
+import mg.msys.merguez_api.group.application.usecase.GetCurrentGroupSessionService;
 import mg.msys.merguez_api.group.application.usecase.GetGroupSessionsService;
 import mg.msys.merguez_api.group.application.usecase.ListMyGroupsService;
 import mg.msys.merguez_api.group.application.usecase.StartSessionService;
@@ -75,6 +77,11 @@ public class GroupConfiguration {
     @Bean
     GetGroupSessionsUseCase getGroupSessionsUseCase(GroupRepository groupRepository) {
         return new GetGroupSessionsService(groupRepository);
+    }
+
+    @Bean
+    GetCurrentGroupSessionUseCase getCurrentGroupSessionUseCase(LoadGroupWithActiveOccurrencePort groupLoader) {
+        return new GetCurrentGroupSessionService(groupLoader);
     }
 
     @Bean

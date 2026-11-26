@@ -7,6 +7,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import mg.msys.merguez_api.group.application.exception.CurrentGroupSessionNotFoundException;
 import mg.msys.merguez_api.group.application.exception.GroupNotFoundException;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.exception.ScheduledSessionNotFoundException;
@@ -28,6 +29,11 @@ public class GroupExceptionHandler {
     @ExceptionHandler(GroupNotFoundException.class)
     ProblemDetail handleGroupNotFound() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Group not found.");
+    }
+
+    @ExceptionHandler(CurrentGroupSessionNotFoundException.class)
+    ProblemDetail handleCurrentGroupSessionNotFound() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Current group session not found.");
     }
 
     @ExceptionHandler(ScheduledSessionNotFoundException.class)

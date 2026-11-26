@@ -198,7 +198,30 @@
       }
     },
     {
-      "name": "10. Refuser la clôture avec une manche ouverte (409)",
+      "name": "10. Récupérer la session en cours",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('Current session includes its schedule, completed round, and current round', function () {",
+        "    pm.response.to.have.status(200);",
+        "    const result = pm.response.json();",
+        "    pm.expect(result.occurrence.groupId).to.equal(pm.variables.get('groupId'));",
+        "    pm.expect(result.occurrence.scheduleId).to.equal(pm.variables.get('sessionId'));",
+        "    pm.expect(result.scheduledSession.id).to.equal(pm.variables.get('sessionId'));",
+        "    pm.expect(result.completedRounds).to.have.lengthOf(1);",
+        "    pm.expect(result.completedRounds[0].number).to.equal(1);",
+        "    pm.expect(result.completedRounds[0].status).to.equal('CLOSED');",
+        "    pm.expect(result.completedRounds[0].combats).to.have.lengthOf(3);",
+        "    pm.expect(result.currentRound.number).to.equal(2);",
+        "    pm.expect(result.currentRound.status).to.equal('IN_PROGRESS');",
+        "    pm.expect(result.currentRound.combats).to.deep.equal([{participantIds: [pm.variables.get('creatorId'), pm.variables.get('participant5Id')], winnerId: null}]);",
+        "});"
+      ]}}],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/current"
+      }
+    },
+    {
+      "name": "11. Refuser la clôture avec une manche ouverte (409)",
       "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
         "pm.test('Session closure is refused while a round is open', function () {",
         "    pm.response.to.have.status(409);",
@@ -215,7 +238,7 @@
       }
     },
     {
-      "name": "11. Clôturer la deuxième manche",
+      "name": "12. Clôturer la deuxième manche",
       "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
         "pm.test('Second round is closed', function () {",
         "    pm.response.to.have.status(200);",
@@ -233,7 +256,7 @@
       }
     },
     {
-      "name": "12. Clôturer la session",
+      "name": "13. Clôturer la session",
       "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
         "pm.test('Session is closed with its final scores and payments', function () {",
         "    pm.response.to.have.status(200);",
@@ -253,7 +276,22 @@
       }
     },
     {
-      "name": "13. Lister mes groupes",
+      "name": "14. Refuser la session courante après clôture (404)",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('A closed session is no longer current', function () {",
+        "    pm.response.to.have.status(404);",
+        "    const problem = pm.response.json();",
+        "    pm.expect(problem.status).to.equal(404);",
+        "    pm.expect(problem.detail).to.equal('Current group session not found.');",
+        "});"
+      ]}}],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/current"
+      }
+    },
+    {
+      "name": "15. Lister mes groupes",
       "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
         "pm.test('The created group appears in the user group summaries', function () {",
         "    pm.response.to.have.status(200);",

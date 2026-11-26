@@ -218,6 +218,38 @@ class MongoSessionOccurrenceRepositoryTest {
         assertEquals(List.of(replacement), restoredAfterReplacement.rounds(occurrence));
     }
 
+    @Test
+    @DisplayName("Loading an active group session restores its schedule and completed and current rounds")
+    void activeOccurrenceLoaderRestoresScheduledSessionAndAllRoundStates() {
+        UserId admin = new UserId(UUID.randomUUID());
+        UserId member = new UserId(UUID.randomUUID());
+        Group group = Group.create("Tuesday dojo", admin, List.of(member));
+        Session scheduledSession =
+                group.createSession(admin, "Evening practice", DayOfWeek.TUESDAY, LocalTime.of(18, 30));
+        SessionOccurrence occurrence = group.startSession(admin, scheduledSession);
+        groupRepository.save(group);
+        occurrenceRepository.save(occurrence);
+
+        Combat completedCombat = new Combat(List.of(admin, member), Optional.of(admin));
+        Combat currentCombat = new Combat(List.of(admin, member), Optional.empty());
+        Round completedRound = new Round(occurrence, 1, RoundStatus.CLOSED, List.of(completedCombat));
+        Round currentRound = new Round(occurrence, 2, RoundStatus.IN_PROGRESS, List.of(currentCombat));
+        roundRepository.save(completedRound);
+        roundRepository.save(currentRound);
+
+        Group restored = activeOccurrenceLoader.loadByGroupId(group.id()).orElseThrow();
+        SessionOccurrence restoredOccurrence = restored.activeOccurrences().getFirst();
+
+        assertAll(
+                () -> assertEquals(List.of(scheduledSession), restored.sessions()),
+                () -> assertEquals(scheduledSession.id(), restoredOccurrence.scheduleId()),
+                () -> assertEquals(List.of(completedRound, currentRound), restored.rounds(restoredOccurrence)),
+                () -> assertEquals(RoundStatus.CLOSED, restored.rounds(restoredOccurrence).getFirst().status()),
+                () -> assertEquals(2, restored.rounds(restoredOccurrence).getLast().number()),
+                () -> assertEquals(RoundStatus.IN_PROGRESS, restored.rounds(restoredOccurrence).getLast().status()),
+                () -> assertEquals(List.of(currentCombat), restored.rounds(restoredOccurrence).getLast().combats()));
+    }
+
     @ParameterizedTest(name = "{0}, historical revision: {1}")
     @CsvSource({"save, false", "save, true", "create, false", "create, true",
             "replace, false", "replace, true"})

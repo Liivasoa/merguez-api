@@ -15,6 +15,12 @@ Then l’adaptateur transmet l’identifiant du groupe au cas d’utilisation
 And la réponse expose la session programmée correspondante et la liste des rounds terminés
 And la réponse expose l’unique round en cours avec son numéro et sa liste de combats
 
+2. Retourner 404 lorsqu’aucune session en cours n’est disponible
+Ref Domain: D1
+Scenario: le cas d’utilisation signale l’absence de session active pour le groupe demandé
+Given l’identifiant d’un groupe inexistant ou sans occurrence active
+When l’utilisateur demande la session en cours de ce groupe
+Then l’API retourne le statut 404 avec un ProblemDetail
+
 **Notes**
-- La route, le code HTTP et la forme détaillée de la réponse ne sont pas spécifiés.
-- La réponse à produire lorsqu’aucune session n’est en cours n’est pas spécifiée.
+- La route et la forme détaillée de la réponse de succès ne sont pas spécifiées.
