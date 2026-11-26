@@ -53,7 +53,7 @@ Receive the complete Red result, including `test_file_path`, `test_method_name`,
 - Make the smallest production change directly justified by the target test.
 - Do not add functionality not required by the scenario.
 - Do not include unrelated or pre-existing changes in the Green commit.
-- Follow `AGENTS.md` and the established conventions in the target test class and surrounding production package.
+- Follow `backend/AGENTS.md` and the established conventions in the target test class and surrounding production package.
 
 ## Output format
 
