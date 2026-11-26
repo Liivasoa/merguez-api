@@ -2,6 +2,7 @@ package mg.msys.merguez_api.group.application.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -14,9 +15,11 @@ import org.junit.jupiter.api.Test;
 
 import mg.msys.merguez_api.group.application.port.in.GetCurrentGroupSessionUseCase;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
+import mg.msys.merguez_api.group.application.exception.CurrentGroupSessionNotFoundException;
 import mg.msys.merguez_api.group.application.result.CurrentGroupSessionResult;
 import mg.msys.merguez_api.group.domain.model.Combat;
 import mg.msys.merguez_api.group.domain.model.Group;
+import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.Round;
 import mg.msys.merguez_api.group.domain.model.RoundStatus;
 import mg.msys.merguez_api.group.domain.model.Session;
@@ -55,6 +58,14 @@ class GetCurrentGroupSessionServiceTest {
         assertEquals(RoundStatus.IN_PROGRESS, result.currentRound().status());
         assertEquals(currentRound.number(), result.currentRound().number());
         assertEquals(currentRound.combats(), result.currentRound().combats());
+    }
+
+    @Test
+    void throwsCurrentGroupSessionNotFoundWhenLoaderReturnsEmpty() {
+        GroupId groupId = GroupId.random();
+        GetCurrentGroupSessionUseCase useCase = new GetCurrentGroupSessionService(groupIdToLoad -> Optional.empty());
+
+        assertThrows(CurrentGroupSessionNotFoundException.class, () -> useCase.execute(groupId));
     }
 
     private static UserId user() {
