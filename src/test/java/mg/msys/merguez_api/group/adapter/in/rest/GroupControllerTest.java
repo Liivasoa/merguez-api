@@ -59,6 +59,7 @@ import mg.msys.merguez_api.group.application.command.CloseSessionCommand;
 import mg.msys.merguez_api.group.application.command.CreateGroupCommand;
 import mg.msys.merguez_api.group.application.command.CreateSessionCommand;
 import mg.msys.merguez_api.group.application.command.StartSessionCommand;
+import mg.msys.merguez_api.group.application.exception.CurrentGroupSessionNotFoundException;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
@@ -1380,5 +1381,21 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.currentRound.combats[0].participantIds.length()").value(2));
 
         verify(GetCurrentGroupSessionService).execute(group.id());
+    }
+
+    @Test
+    @DisplayName("GET the current group session returns 404 when no active session exists")
+    void getCurrentGroupSessionReturnsNotFoundWhenNoActiveSessionExists() throws Exception {
+        GroupId groupId = GroupId.random();
+        when(GetCurrentGroupSessionService.execute(groupId))
+                .thenThrow(new CurrentGroupSessionNotFoundException(groupId));
+
+        mockMvc.perform(get("/api/v1/groups/{groupId}/sessions/current", groupId.value()))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.detail").value("Current group session not found."));
+
+        verify(GetCurrentGroupSessionService).execute(groupId);
     }
 }
