@@ -74,14 +74,14 @@ Règles :
 ## En tant qu'utilisateur, je veux récuperer la session en cours de mon groupe
 
 Règles :
+- On récupère une session en cours via l'id de group à qui il appartient
 - Il peut y avoir une seule et unique session en cours pour un groupe donnée
-- Une session en cours doit avoir son numéro
 - Une session en cours doit avoir la session programmé qui lui correspond
 - Une session en cours doit avoir la liste des rounds terminé
 - Une session en cours doit avoir un et un seul round en cours
-- Un round contient exactement 2 participants
-- Un round peut avoir un vainqueur
-- Un round doit avoir un numéro unique pour chaque round d'une même session
+- Un round en cours peut être identifié par son numéro
+- Un round en cours doit avoir une liste de combat
+
 
 ## En tant qu'utilisateur, je veux savoir s'il existe déjà une session en cours dans mon groupe
 

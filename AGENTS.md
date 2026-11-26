@@ -160,4 +160,6 @@ If the project explicitly adopts a pragmatic profile, selected injection or tran
 
 ## Development guidelines
 
+- For every new feature implementation in this repository, always invoke the `feature_implementation` agent with the feature folder under `docs/features/`. Do not implement the feature directly instead of using that agent. Follow its workflow and report any blocker it encounters before making changes outside that workflow.
+
 When managing source control, always use `@conventional-commit`
