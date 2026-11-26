@@ -276,7 +276,22 @@
       }
     },
     {
-      "name": "14. Lister mes groupes",
+      "name": "14. Refuser la session courante après clôture (404)",
+      "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+        "pm.test('A closed session is no longer current', function () {",
+        "    pm.response.to.have.status(404);",
+        "    const problem = pm.response.json();",
+        "    pm.expect(problem.status).to.equal(404);",
+        "    pm.expect(problem.detail).to.equal('Current group session not found.');",
+        "});"
+      ]}}],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/groups/{{groupId}}/sessions/current"
+      }
+    },
+    {
+      "name": "15. Lister mes groupes",
       "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
         "pm.test('The created group appears in the user group summaries', function () {",
         "    pm.response.to.have.status(200);",
