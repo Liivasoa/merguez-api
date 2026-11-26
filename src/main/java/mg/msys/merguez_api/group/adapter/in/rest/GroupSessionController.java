@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,13 +16,16 @@ import org.springframework.web.bind.annotation.RestController;
 import mg.msys.merguez_api.group.adapter.in.rest.request.CloseSessionRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.request.CreateSessionRequest;
 import mg.msys.merguez_api.group.adapter.in.rest.request.StartSessionRequest;
+import mg.msys.merguez_api.group.adapter.in.rest.response.CurrentGroupSessionResponse;
 import mg.msys.merguez_api.group.adapter.in.rest.response.SessionClosureResponse;
 import mg.msys.merguez_api.group.adapter.in.rest.response.SessionOccurrenceResponse;
 import mg.msys.merguez_api.group.adapter.in.rest.response.SessionResponse;
 import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
+import mg.msys.merguez_api.group.application.port.in.GetCurrentGroupSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
 import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
+import mg.msys.merguez_api.group.application.result.CurrentGroupSessionResult;
 import mg.msys.merguez_api.group.domain.model.GroupId;
 import mg.msys.merguez_api.group.domain.model.SessionClosureResult;
 import mg.msys.merguez_api.group.domain.model.SessionOccurrence;
@@ -34,16 +38,28 @@ public class GroupSessionController {
     private final GetGroupSessionsUseCase getGroupSessionsUseCase;
     private final StartSessionUseCase startSessionUseCase;
     private final CloseSessionUseCase closeSessionUseCase;
+    private final GetCurrentGroupSessionUseCase getCurrentGroupSessionUseCase;
+
+    @Autowired
+    public GroupSessionController(
+            CreateSessionUseCase createSessionUseCase,
+            GetGroupSessionsUseCase getGroupSessionsUseCase,
+            StartSessionUseCase startSessionUseCase,
+            CloseSessionUseCase closeSessionUseCase,
+            GetCurrentGroupSessionUseCase getCurrentGroupSessionUseCase) {
+        this.createSessionUseCase = createSessionUseCase;
+        this.getGroupSessionsUseCase = getGroupSessionsUseCase;
+        this.startSessionUseCase = startSessionUseCase;
+        this.closeSessionUseCase = closeSessionUseCase;
+        this.getCurrentGroupSessionUseCase = getCurrentGroupSessionUseCase;
+    }
 
     public GroupSessionController(
             CreateSessionUseCase createSessionUseCase,
             GetGroupSessionsUseCase getGroupSessionsUseCase,
             StartSessionUseCase startSessionUseCase,
             CloseSessionUseCase closeSessionUseCase) {
-        this.createSessionUseCase = createSessionUseCase;
-        this.getGroupSessionsUseCase = getGroupSessionsUseCase;
-        this.startSessionUseCase = startSessionUseCase;
-        this.closeSessionUseCase = closeSessionUseCase;
+        this(createSessionUseCase, getGroupSessionsUseCase, startSessionUseCase, closeSessionUseCase, null);
     }
 
     @PostMapping
@@ -79,5 +95,11 @@ public class GroupSessionController {
         return getGroupSessionsUseCase.execute(new GroupId(groupId)).stream()
                 .map(SessionResponse::from)
                 .toList();
+    }
+
+    @GetMapping("/current")
+    public CurrentGroupSessionResponse getCurrentGroupSession(@PathVariable UUID groupId) {
+        CurrentGroupSessionResult result = getCurrentGroupSessionUseCase.execute(new GroupId(groupId));
+        return CurrentGroupSessionResponse.from(result);
     }
 }
