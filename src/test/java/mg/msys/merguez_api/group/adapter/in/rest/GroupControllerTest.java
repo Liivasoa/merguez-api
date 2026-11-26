@@ -62,6 +62,7 @@ import mg.msys.merguez_api.group.application.command.StartSessionCommand;
 import mg.msys.merguez_api.group.application.exception.RoundOperationRefusedException;
 import mg.msys.merguez_api.group.application.exception.SessionAlreadyStartedException;
 import mg.msys.merguez_api.group.application.exception.SessionClosureRefusedException;
+import mg.msys.merguez_api.group.application.result.CurrentGroupSessionResult;
 import mg.msys.merguez_api.group.application.port.out.GroupRepository;
 import mg.msys.merguez_api.group.application.port.out.LoadGroupWithActiveOccurrencePort;
 import mg.msys.merguez_api.group.application.port.out.LogSessionClosurePort;
@@ -73,6 +74,7 @@ import mg.msys.merguez_api.group.application.port.in.CloseSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateGroupUseCase;
 import mg.msys.merguez_api.group.application.port.in.CreateSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.GetGroupSessionsUseCase;
+import mg.msys.merguez_api.group.application.port.in.GetCurrentGroupSessionUseCase;
 import mg.msys.merguez_api.group.application.port.in.ListMyGroupsUseCase;
 import mg.msys.merguez_api.group.application.port.in.StartSessionUseCase;
 import mg.msys.merguez_api.group.application.usecase.AddRoundService;
@@ -114,6 +116,9 @@ class GroupControllerTest {
 
     @MockitoBean
     private GetGroupSessionsUseCase GetGroupSessionsService;
+
+    @MockitoBean
+    private GetCurrentGroupSessionUseCase GetCurrentGroupSessionService;
 
     @MockitoBean
     private StartSessionUseCase StartSessionService;
@@ -1345,5 +1350,35 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.status").value(400))
                 // And the detail carries the domain message
                 .andExpect(jsonPath("$.detail").value("Group name is required"));
+    }
+
+    @Test
+    @DisplayName("GET the current group session returns its schedule and round state")
+    void getCurrentGroupSessionForwardsGroupIdAndReturnsCompleteSessionState() throws Exception {
+        UserId requester = new UserId(UUID.randomUUID());
+        UserId participant = new UserId(UUID.randomUUID());
+        Group group = Group.create("Training", requester, List.of(participant));
+        Session scheduledSession = group.createSession(requester, "Practice", DayOfWeek.TUESDAY, LocalTime.NOON);
+        SessionOccurrence occurrence = group.startSession(requester, scheduledSession);
+        Combat completedCombat = new Combat(List.of(requester, participant), Optional.of(requester));
+        Round completedRound = group.addRound(requester, occurrence, List.of(completedCombat));
+        group.closeRound(requester, completedRound, List.of(completedCombat));
+        Combat currentCombat = new Combat(List.of(requester, participant), Optional.empty());
+        Round currentRound = group.addRound(requester, occurrence, List.of(currentCombat));
+        when(GetCurrentGroupSessionService.execute(group.id())).thenReturn(new CurrentGroupSessionResult(
+                occurrence, scheduledSession, List.of(completedRound), currentRound));
+
+        mockMvc.perform(get("/api/v1/groups/{groupId}/sessions/current", group.id().value()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.occurrence.groupId").value(group.id().value().toString()))
+                .andExpect(jsonPath("$.scheduledSession.id").value(scheduledSession.id().toString()))
+                .andExpect(jsonPath("$.completedRounds.length()").value(1))
+                .andExpect(jsonPath("$.completedRounds[0].number").value(1))
+                .andExpect(jsonPath("$.currentRound.number").value(2))
+                .andExpect(jsonPath("$.currentRound.combats.length()").value(1))
+                .andExpect(jsonPath("$.currentRound.combats[0].participantIds.length()").value(2));
+
+        verify(GetCurrentGroupSessionService).execute(group.id());
     }
 }
