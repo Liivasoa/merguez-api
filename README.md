@@ -1,4 +1,4 @@
-# Merguez API
+# Merguez
 
 Merguez helps a group of friends track Brazilian jiu-jitsu rounds and settle session scores. This Spring Boot REST API stores groups, scheduled sessions, session occurrences, rounds, and combat results in MongoDB.
 
@@ -13,24 +13,45 @@ Merguez helps a group of friends track Brazilian jiu-jitsu rounds and settle ses
 
 See [the feature overview](docs/features.md) for the current business rules.
 
+## Repository layout
+
+- `backend/` contains the Spring Boot API, Maven build, Docker image, and Postman collections.
+- `frontend/` contains Ionic Angular instructions; the frontend application has not been scaffolded yet.
+- `.agents/skills/` contains repository skills shared according to their descriptions. Backend and frontend-specific instructions live in each application's `AGENTS.md`.
+
 ## Requirements
 
-- Java 25
-- Docker, for the bundled MongoDB service
-- Maven Wrapper (included)
+- Docker with the Compose plugin, to run the API and MongoDB containers
+- Maven Wrapper (included under `backend/`)
+- Java 25, when running the API outside Docker
 
 ## Run locally
 
-Start MongoDB and the API from the project root:
+Build and start the API and MongoDB containers from the project root:
 
 ```powershell
-docker compose up -d
-.\mvnw.cmd spring-boot:run
+docker compose up --build -d
 ```
 
-The API listens on `http://localhost:8080`. By default it connects to `mongodb://localhost:27017/merguez`. Set `MONGODB_URI` to use another MongoDB connection string.
+The API listens on `http://localhost:8080`. Compose waits for MongoDB to become healthy before starting the API. To stop the services:
 
-To stop the local services:
+```powershell
+docker compose down
+```
+
+For local Java development, start only MongoDB and run the API with the Maven Wrapper:
+
+```powershell
+docker compose up -d mongodb
+$env:SPRING_DOCKER_COMPOSE_ENABLED = 'false'
+.\backend\mvnw.cmd -f backend\pom.xml spring-boot:run
+```
+
+The environment setting prevents Spring Boot's development-time Compose integration from managing the root Compose file while the API runs as a local process.
+
+The local process connects to `mongodb://localhost:27017/merguez` by default. Set `MONGODB_URI` to use another MongoDB connection string.
+
+To stop MongoDB:
 
 ```powershell
 docker compose down
@@ -102,8 +123,8 @@ Requests identify the acting member by `requesterId`. Authentication is not curr
 
 Import either collection into Postman:
 
-- `postman/merguez-api.postman_collection.json` for individual requests and error cases.
-- `postman/merguez-api-e2e.postman_collection.json` for the full happy path.
+- `backend/postman/merguez-api.postman_collection.json` for individual requests and error cases.
+- `backend/postman/merguez-api-e2e.postman_collection.json` for the full happy path.
 
 Start MongoDB and the API first. Set the collection's `baseUrl` if needed, then run the E2E collection in order with one iteration. Do not override its generated identifiers with environment variables of the same name. The run creates a group and session data that remain in MongoDB; the API currently has no cleanup endpoint.
 
@@ -112,5 +133,5 @@ Start MongoDB and the API first. Set the collection's `baseUrl` if needed, then 
 Run the test suite with:
 
 ```powershell
-.\mvnw.cmd test
+.\backend\mvnw.cmd -f backend\pom.xml test
 ```

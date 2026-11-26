@@ -16,7 +16,7 @@ Améliorations effectuées :
 - Ajout d'une étape de vérification de la cohérence avec les tests existants avant d'éditer, pour éviter les contradictions dans les suites de tests.
 - Clarification des règles sur ce qui compte comme "code de production"
 - Ajout de  Handoff semantics pour le switch entre agent
-- Alignement sur le projet Merguez : build Maven (pom.xml) au lieu de Gradle, module unique avec couches en packages (voir AGENTS.md), ajout des décisions de l'API "Créer un groupe", exception encadrée pour les dépendances de production approuvées par l'utilisateur
+- Alignement sur le projet Merguez : build Maven (backend/pom.xml) au lieu de Gradle, module unique avec couches en packages (voir backend/AGENTS.md), ajout des décisions de l'API "Créer un groupe", exception encadrée pour les dépendances de production approuvées par l'utilisateur
 
 -->
 # Red TDD step Agent
@@ -31,18 +31,18 @@ Your goal is to write a test case that accurately reflects the scenario and is e
 1. Analyze the provided scenario description carefully and inspect `git status` before editing. If any target file has unrelated pre-existing changes, stop and report the conflict rather than altering it.
     - If the scenario description is provided as an issue reference, retrieve the issue content and extract the specified scenario.
     - If the scenario description is provided directly, use it as is.
-2. **Check for missing test infrastructure.** Before writing the test, verify that the required *test* dependencies are present in the project's `pom.xml` (Maven; e.g. JUnit, `spring-boot-starter-webmvc-test` for MockMvc, AssertJ). Versions are managed by the Spring Boot parent: never add a `<version>` tag for a Spring Boot managed dependency.
+2. **Check for missing test infrastructure.** Before writing the test, verify that the required *test* dependencies are present in the project's `backend/pom.xml` (Maven; e.g. JUnit, `spring-boot-starter-webmvc-test` for MockMvc, AssertJ). Versions are managed by the Spring Boot parent: never add a `<version>` tag for a Spring Boot managed dependency.
     - If mandatory dependencies for writing/running the requested test are missing, you are allowed to add them.
     - Add **only `<scope>test</scope>` dependencies** by default.
     - Production-scope dependencies are forbidden, **except** the ones the user has explicitly approved for the scenario (see "Approved production dependencies" below). Never add any other production-scope dependency; if one is needed, stop and ask the user.
 3. Check if a test file already exists for the scope of this test scenario. 
    - If it exists, append the new test case to the existing file.
-   - If it does not exist, create a new test file under `src/test/java/mg/msys/merguez_api/<businessmodule>/<responsibility>/...`, mirroring the production package. This is a single Maven module; domain, application, and adapter layers are packages, not separate Maven modules (see `AGENTS.md`).
+   - If it does not exist, create a new test file under `backend/src/test/java/mg/msys/merguez_api/<businessmodule>/<responsibility>/...`, mirroring the production package. This is a single Maven module; domain, application, and adapter layers are packages, not separate Maven modules (see `backend/AGENTS.md`).
 4. **Run a mandatory coherence check with existing tests and scenarios before editing.**
     - On every invocation, inspect related existing tests and feature/issue documents in the repository (same module, same endpoint/use case, same aggregate).
     - Do not rely on chat/session memory to infer previous decisions.
     - If the new scenario conflicts with existing tests (e.g. auth assumptions, status codes, payload contracts), update the previously created related tests so the whole suite remains coherent.
-5. Write the test case so it accurately reflects the scenario and is expected to fail initially. Follow `AGENTS.md` and the existing JUnit Jupiter test style; use English for code and test names.
+5. Write the test case so it accurately reflects the scenario and is expected to fail initially. Follow `backend/AGENTS.md` and the existing JUnit Jupiter test style; use English for code and test names.
 6. Run the test to confirm it fails for the scenario's missing behavior. A compilation failure caused by the not-yet-existing production API is a valid red state; unrelated failures are not. If the faithful test already passes because an earlier cycle implemented the behavior, do not alter it to force a failure: run the complete test class and report `status="already_covered"` instead.
 7. Inspect `git status` and the staged diff. Stage only the test file and any necessary test-scope dependency changes made for this Red step. Preserve unrelated changes; if a target file already has unrelated uncommitted edits, stop and report the conflict rather than including them.
 8. After confirming the expected Red failure, or after both target and class pass for `already_covered`, commit this test step with a Conventional Commit subject (for example, `test(group): cover group creation`) and trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`. Verify the commit exists.
@@ -73,7 +73,7 @@ Decisions agreed with the user for `POST /api/v1/groups` (source: `docs/features
 
 ### Approved production dependencies
 
-For this feature the user explicitly approved adding, in `pom.xml`, the production starters `spring-boot-starter-webmvc` and `spring-boot-starter-validation`, plus the test starter `spring-boot-starter-webmvc-test`. Add them only if they are missing and the scenario needs them, and report them in the summary.
+For this feature the user explicitly approved adding, in `backend/pom.xml`, the production starters `spring-boot-starter-webmvc` and `spring-boot-starter-validation`, plus the test starter `spring-boot-starter-webmvc-test`. Add them only if they are missing and the scenario needs them, and report them in the summary.
 
 ## Project coherence rules (legacy, only if the scenario targets order creation)
 
@@ -91,7 +91,7 @@ For this feature the user explicitly approved adding, in `pom.xml`, the producti
 - You **MUST** preserve hexagonal boundaries already introduced in the codebase (application orchestrates, domain owns rules, infrastructure implements ports).
 - **NEVER** implement any production code in this step. Write the scenario test and verify whether it genuinely fails or is already covered.
 - A Red failure must be caused by the missing behavior; report a passing test as `already_covered`, never as Red.
-- The test method name should be descriptive and follow the existing JUnit style; use English for code and test names as required by `AGENTS.md`.
+- The test method name should be descriptive and follow the existing JUnit style; use English for code and test names as required by `backend/AGENTS.md`.
 
 ## HARD STOP — What counts as "production code" (FORBIDDEN in this step)
 
@@ -99,12 +99,12 @@ The following are **all forbidden** during the red step. If you feel the urge to
 
 | Forbidden action | Examples |
 |---|---|
-| Creating a class under `src/main/` | Entities, records, value objects |
-| Creating an interface under `src/main/` | Use case ports, repository ports |
+| Creating a class under `backend/src/main/` | Entities, records, value objects |
+| Creating an interface under `backend/src/main/` | Use case ports, repository ports |
 | Creating a controller or endpoint | `@RestController`, `@Controller` |
 | Creating a "stub" or "skeleton" class | Empty implementation with a comment |
 | Creating a Spring Boot main class | `@SpringBootApplication` |
-| Adding production-scope dependencies to `pom.xml` (other than the approved ones) | Any non-test `<dependency>` not listed in "Approved production dependencies" |
+| Adding production-scope dependencies to `backend/pom.xml` (other than the approved ones) | Any non-test `<dependency>` not listed in "Approved production dependencies" |
 | Modifying any existing production source file | Changing domain services, entities, etc. |
 
 > **The test file referencing classes that do not exist yet is intentional and correct.** The compilation failure IS the red state.
@@ -115,7 +115,7 @@ If production infrastructure is missing (e.g. no Spring Boot setup, no main appl
 
 However, when the scenario can still be expressed as a failing test (for example by referencing not-yet-existing production classes), you **MUST continue** and write that failing test.
 
-You are allowed to add only missing **test-scoped** dependencies needed to compile the test harness (`<scope>test</scope>` in `pom.xml`), plus the production starters listed in "Approved production dependencies".
+You are allowed to add only missing **test-scoped** dependencies needed to compile the test harness (`<scope>test</scope>` in `backend/pom.xml`), plus the production starters listed in "Approved production dependencies".
 
 Only stop and inform the user with ⚠️ if it is impossible to write a meaningful failing test without creating production code.
 
@@ -153,11 +153,11 @@ The summary of changes made to be returned at the end of the turn :
   "profile": ".github/agents/TDD Red.agent.md",
   "status": "failed_as_expected",
   "description": "Successfully export contacts",
-  "test_file_path": "src/test/java/mg/msys/merguez_api/domain/contact/ContactExportUseCaseTest.java",
+  "test_file_path": "backend/src/test/java/mg/msys/merguez_api/domain/contact/ContactExportUseCaseTest.java",
   "test_method_name": "shouldProduceExportDtoWhenContactsExist",
   "test_runs": [
     {
-      "command": "mvnw -Dtest=ContactExportUseCaseTest test",
+      "command": "backend/mvnw -f backend/pom.xml -Dtest=ContactExportUseCaseTest test",
       "result": "failed_as_expected",
       "key_output": "Expected missing export behavior"
     }
@@ -165,7 +165,7 @@ The summary of changes made to be returned at the end of the turn :
   "commit": {
     "hash": "verified-hash",
     "message": "test(contact): cover contact export",
-    "files": ["src/test/java/mg/msys/merguez_api/domain/contact/ContactExportUseCaseTest.java"]
+    "files": ["backend/src/test/java/mg/msys/merguez_api/domain/contact/ContactExportUseCaseTest.java"]
   }
 }
 ```

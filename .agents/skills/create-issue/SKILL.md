@@ -1,9 +1,11 @@
 --- 
 name: create-issue
-description: Create an issue in the form of a markdown file with title, description, implementation plan, and Gherkin test scenarios from a functional request. Use when needing structured, testable issues.
+description: Create structured, testable issue files for new backend product features under docs/features/. Use for backend domain, application, and adapter issues; not for frontend-only UI work.
 ---
 
 # Instructions
+
+**Scope:** Use this skill for backend product features documented under docs/features/. Do not use it for frontend-only UI tasks.
 1. Use right thinking and structured analysis before writing anything.
 2. Extract context, explicit rules, and success criteria from the request.
 3. Build a rule coverage checklist before writing anything. You MUST list every business rule found in the request and map each one to at least one acceptance criterion or note.

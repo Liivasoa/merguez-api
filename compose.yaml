@@ -7,6 +7,23 @@ services:
       MONGO_INITDB_DATABASE: merguez
     volumes:
       - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - '8080:8080'
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/merguez
+    depends_on:
+      mongodb:
+        condition: service_healthy
 
 volumes:
   mongodb-data:

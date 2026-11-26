@@ -22,7 +22,7 @@ Receive the complete Green JSON result, including target test path and method, p
 ## Mandatory context
 
 - Read the Green changes and current code before editing; do not rely only on the handoff summary.
-- Follow `AGENTS.md` and the established conventions in the affected production and test packages.
+- Follow `backend/AGENTS.md` and the established conventions in the affected production and test packages.
 - Follow repository architecture and preserve dependency boundaries.
 
 ## Instructions
