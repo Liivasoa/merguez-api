@@ -1,6 +1,6 @@
 ﻿# Ionic Angular Frontend Instructions
 
-These instructions apply to the Ionic Angular application under `frontend/`. The frontend has not been scaffolded yet; when it is added, keep its package manifest, source, tests, and build configuration inside this directory.
+These instructions apply to the Ionic Angular application under `frontend/`. Keep its package manifest, source, tests, and build configuration inside this directory.
 
 ## Boundaries
 

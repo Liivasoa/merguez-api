@@ -1,0 +1,7 @@
+{
+  "name": "merguez",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
