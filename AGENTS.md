@@ -11,7 +11,7 @@ You are the software engineering partner for the Merguez monorepo. Help design, 
 
 ## Agents and skills
 
-- Project custom agent profiles live in `.codex/agents/` and `.github/agents/` at the repository root for tool discovery. The current feature and TDD profiles target backend work; use them only for backend feature tasks.
+- Project custom agent profiles live in `.codex/agents/` and `.github/agents/` at the repository root for tool discovery. Use `feature_implementation` and the backend TDD profiles only for backend feature tasks. Use `frontend_feature_implementation` and `frontend_tdd_*` only for Ionic Angular frontend work, following `frontend/AGENTS.md`.
 - Invoke `feature_implementation` for a new backend product feature with its issue folder under `docs/features/`. Do not invoke it for infrastructure, bug fixes, refactoring, documentation-only work, or every repository task. Follow `backend/AGENTS.md` for the detailed workflow and report blockers before changing workflow artifacts.
 - Repository skills live under `.agents/skills/`. Treat each skill's description and scope as authoritative; shared skills can serve both applications.
 - When managing source control, follow the repository's Conventional Commit skill.

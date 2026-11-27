@@ -16,7 +16,7 @@ See [the feature overview](docs/features.md) for the current business rules.
 ## Repository layout
 
 - `backend/` contains the Spring Boot API, Maven build, Docker image, and Postman collections.
-- `frontend/` contains Ionic Angular instructions; the frontend application has not been scaffolded yet.
+- `frontend/` contains the Ionic Angular application and its instructions.
 - `.agents/skills/` contains repository skills shared according to their descriptions. Backend and frontend-specific instructions live in each application's `AGENTS.md`.
 
 ## Requirements
@@ -24,6 +24,7 @@ See [the feature overview](docs/features.md) for the current business rules.
 - Docker with the Compose plugin, to run the API and MongoDB containers
 - Maven Wrapper (included under `backend/`)
 - Java 25, when running the API outside Docker
+- Node.js 22.22.3 or newer in the supported Angular range, when developing the frontend
 
 ## Run locally
 
@@ -33,7 +34,7 @@ Build and start the API and MongoDB containers from the project root:
 docker compose up --build -d
 ```
 
-The API listens on `http://localhost:8080`. Compose waits for MongoDB to become healthy before starting the API. To stop the services:
+The frontend listens on `http://localhost:4200` and the API on `http://localhost:8080`. The frontend container serves the Angular build with Nginx and forwards `/api/` requests to the API container. Compose waits for MongoDB to become healthy before starting the API. To stop the services:
 
 ```powershell
 docker compose down
@@ -129,6 +130,16 @@ Import either collection into Postman:
 Start MongoDB and the API first. Set the collection's `baseUrl` if needed, then run the E2E collection in order with one iteration. Do not override its generated identifiers with environment variables of the same name. The run creates a group and session data that remain in MongoDB; the API currently has no cleanup endpoint.
 
 ## Development
+
+Run the frontend from its directory:
+
+```powershell
+cd frontend
+npm ci
+npm start
+```
+
+The Ionic app is served at the local URL printed by Angular CLI. See `frontend/README.md` for frontend-specific commands and native-platform setup.
 
 Run the test suite with:
 
